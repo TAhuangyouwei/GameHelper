@@ -14,7 +14,7 @@ for File in files do
 
 	try(delete weaponObjs)catch()
 
-	mergeMAXFile theFile #("B_R_sd","B_L_sd","Editable Mesh18","Editable Poly96","U_Char","B_Qiang01","B_Qiang02","B_Qiang03","B_Jian","Jian","Bone043","Bone044","Bone045","gun") #alwaysReparent quite:true 
+	mergeMAXFile theFile #("B_R_sd","B_L_sd","Editable Mesh18","Editable Poly96","U_Char","B_Qiang01","B_Qiang02","B_Qiang03","B_Jian","Jian","Bone043","Bone044","Bone045","gun")  #alwaysReparent #mergeDups #autoRenameDups #useMergedMtlDups quite:true 
 
 	$B_R_sd.transform = (matrix3 [1.99743e-06,5.24124e-06,4.28944] [1,4.41223e-05,-5.68107e-07] [-1.08646e-05,0.246154,-3.15446e-07] [-187.605,-8.01086e-05,32.3214])
 

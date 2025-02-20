@@ -299,4 +299,4 @@ rollout skinWeightsRollout "自动权重工具" width:180 height:160
     )
 )
 
-createdialog skinWeightsRollout 200 150
+createdialog skinWeightsRollout 200 80
