@@ -1,0 +1,30 @@
+MyMaxScriptProject/                # 项目根目录
+├── scripts/                       # 脚本核心目录
+│   ├── main.ms                    # 主入口脚本
+│   ├── modules/                   # 模块化脚本（工具函数、类库）
+│   └── third_party/               # 第三方库或插件脚本
+│
+├── assets/                        # 静态资源
+│   ├── textures/                  # 贴图文件（PNG, JPG, TGA等）
+│   ├── icons/                     # 界面图标（ICO, SVG等）
+│   └── data/                      # JSON/CSV等配置文件
+│
+├── docs/                          # 文档
+│   ├── design/                    # 设计文档、流程图
+│   ├── user_guide/                # 用户使用手册
+│   └── dev_notes/                 # 开发日志、TODO列表
+│
+├── scenes/                        # 3ds Max场景文件
+│   ├── tests/                     # 测试用场景
+│   └── examples/                  # 示例场景
+│
+├── tests/                         # 测试相关
+│   ├── unit_tests/                # 单元测试脚本
+│   └── test_scenes/               # 自动化测试场景
+│
+├── output/                        # 脚本生成的输出文件
+│   ├── renders/                   # 渲染结果
+│   └── exports/                   # 导出的数据或模型
+│
+├── .gitignore                     # 版本控制忽略规则
+└── README.md                      # 项目说明、快速入门
