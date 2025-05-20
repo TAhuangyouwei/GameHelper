@@ -405,6 +405,16 @@ rollout AniTools "动作工具"
 			currentFolder = getFilenamePath (getThisScriptFilename())
 			rulesScript = pathConfig.appendPath currentFolder "/选择同名物体.ms"  --biped外观还原
 			fileIn rulesScript
+				
+			errorObj  = for obj in objects where (classof obj == BoneGeometry and obj.scale.x <0 ) collect obj 
+				
+			if errorObj.count != 0 then 
+			(
+				messageBox "发现骨骼错误的物体"
+				selectmore errorObj
+			)
+
+			
 		)
 	) 
 	
