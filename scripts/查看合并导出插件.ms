@@ -1106,7 +1106,7 @@ rollout modelView "资源查看"
 	edittext edittext_openFolderPath "max文件路径" fieldWidth:270 height:20 labelOnTop:true readOnly:false  tooltip:"文件根目录"  offset:[-45,0]
 	button clearEdit "清空"   tooltip:"清楚路径及列表"  align:#right width:50   offset:[0,17]
 	
-
+	timer tmr_delay interval:1000 active:false
 	
 	
 	listbox maxList "max文件列表" items:#() selection:1 height:30  tooltip:"左键双击打开文件,右键单击打开选择的文件夹"
@@ -1260,18 +1260,28 @@ rollout modelView "资源查看"
 			viewport.setLayout #layout_1
 			viewport.setType #view_persp_user
 				
-			disp = NitrousGraphicsManager.GetActiveViewportSetting() 
-			disp.VisualStyleMode = #ConsistentColors 
+			ViewCubeOps.GoHome()  --透视图
 				
-			max tool zoomextents
-			) 
+-- 			disp = NitrousGraphicsManager.GetActiveViewportSetting() 
+			disp.VisualStyleMode = #ConsistentColors  
+-- 			disp.VisualStyleMode = #Clay 
+			tmr_delay.active = true
+			)
 		catch
 			(
 			messageBox "文件有病毒,请手动打开，杀毒后请另存文件！"
 			ShellLaunch (getFilenamePath(maxfiles[maxList.selection])) ""
 			)
+			
+
 	)
 	
+	on tmr_delay tick do
+	(
+		tmr_delay.active = false
+		max tool zoomextents all
+	)
+
 	on maxList rightClick itm do 
 	(	
 		n1 = maxList.selection
