@@ -55,6 +55,14 @@
 
 完成后，主入口只根据工具 ID 加载脚本。未来改变文件位置时，只修改注册表。
 
+当前进度：
+
+- 已新增 scripts/modules/CGH_ToolRegistry.ms。
+- AnimTools.ms 的子工具按钮已改为按工具 ID 加载。
+- FBX批量导出.ms 已登记为核心工具，但暂未擅自增加主面板按钮。
+- 已增加 tests/unit_tests/test_tool_registry.ms，用于检查全部注册路径。
+- 注册文件存在性静态检查通过；仍需在交互式 3ds Max 中完成按钮冒烟测试。
+
 ## 阶段 4：只移动，不重写
 
 建议按以下顺序，每组一个提交：

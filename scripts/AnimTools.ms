@@ -1,6 +1,17 @@
 ﻿currentFolder = getFilenamePath (getThisScriptFilename())
-HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "HYW_Scripts_Library.ms" --函数库
-fileIn HYW_Scripts_Library_rulesScript
+toolRegistryScript = pathConfig.appendPath currentFolder "modules/CGH_ToolRegistry.ms"
+
+if doesFileExist toolRegistryScript then
+(
+	fileIn toolRegistryScript
+	if ::CGH_ToolRegistry != undefined do
+	(
+		::CGH_ToolRegistry.initialize currentFolder
+		::CGH_ToolRegistry.loadTool #library
+	)
+)
+else
+	messageBox ("GameHelper registry was not found:" + "\n" + toolRegistryScript)
 
 
 
@@ -137,11 +148,9 @@ rollout AniTools "动作工具"
 		
 		button btQuickLook "查看导出合并文件" height:21 width:200
 		
-		on btQuickLook pressed do 
+		on btQuickLook pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/查看合并导出插件.ms"  --max文件查看器
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #viewerExporter
 		)
 		
 
@@ -154,11 +163,9 @@ rollout AniTools "动作工具"
 		)
 		button btFBXtoBip "FBX转Bip" height:21 width:93 enabled:(RolloutUiUtilities.widgetState()) tooltip:"支持2021及以下版本"
 		
-		on btFBXtoBip pressed do 
+		on btFBXtoBip pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/AutoFbxtoBip v1.4.mse"  --FBX转Bip
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #fbxToBip
 1
 		)
 		button bt_TCB_Continuity  "TCB_Continuity" width:93 tooltip:"左键对选中的帧设置 为0，右键设置为25" across:2 width:93
@@ -199,11 +206,9 @@ rollout AniTools "动作工具"
 		
 
 		button bt_animRange "帧数表转换" width:200  tooltips:"unity和max格式转换"
-		on bt_animRange pressed do 
+		on bt_animRange pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/Process_text_file_for_animation_range.ms"  --FBX转Bip
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #animRange
 		)
 		
 		
@@ -242,30 +247,24 @@ rollout AniTools "动作工具"
 		
 		button btBoneDivider "骨骼切分工具"  height:21 width:93 across:2
 		
-		on btBoneDivider pressed do 
+		on btBoneDivider pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/bonedivider.ms"  --FBX转Bip
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #boneDivider
 		)
 
 		button btCopyTrans "轨迹拷贝" height:21 width:93  
 		
-		on btCopyTrans pressed do 
+		on btCopyTrans pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/复制物体运动轨迹.ms"  --FBX转Bip
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #copyTrack
 		)
 		
 		
 		button btRecoder "参考大师"  height:21 width:93 across:2
 		
-		on btRecoder pressed do 
+		on btRecoder pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/参考大师v1.06.mse"  --恢复蒙皮pose
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #referenceMaster
 		)
 		
 		button btRepair "乱码修复Repair"  height:21 width:93 tooltip:"修复界面乱码问题"
@@ -273,11 +272,9 @@ rollout AniTools "动作工具"
 		on btRepair pressed do
 		(
 			InterfaceUtilities.SetDefaultLanguageToChinese()
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/AnimTools.ms"  --FBX转Bip
-			fileIn rulesScript
-			
-		)			
+			::CGH_ToolRegistry.loadTool #animTools
+
+		)
 		
 		
 
@@ -299,37 +296,29 @@ rollout AniTools "动作工具"
 		
 		button bt_resetSkinPose "恢复蒙皮pose" height:21 width:93 across: 2  tooltip:"恢复到Tpose"
 		
-		on bt_resetSkinPose pressed do 
+		on bt_resetSkinPose pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/重置蒙皮pose V1.1.mse"  --恢复蒙皮pose
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #resetSkinPose
 		)
 		button bt_CombineSkin "蒙皮拆分合并"  height:21 width:93   tooltip:"合并时每次选择两个物体"
 		
-		on bt_CombineSkin pressed do 
+		on bt_CombineSkin pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/Rigging_CombineSkin.ms"  --蒙皮拆分合并
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #combineSkin
 		)
 		
 		button bt_facialRig  "表情绑定"  height:21 width:93  across:2  tooltip:"表情绑定工具"
 		
-		on bt_facialRig pressed do 
+		on bt_facialRig pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/facialRig_UI.ms"  --打开表情绑定界面
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #facialRig
 		)
 		
 		button bt_bodylRig  "身体绑定"  height:21 width:93    tooltip:"身体绑定工具"
 		
-		on bt_bodylRig pressed do 
+		on bt_bodylRig pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/自定义骨骼绑定.ms"  --打开身体绑定界面
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #bodyRig
 		)
 		
 		button reNameNub "命名末端" height:21 width:93 tooltip:"bone骨骼末端骨重命名"  across: 2
@@ -339,29 +328,23 @@ rollout AniTools "动作工具"
 		)
 		
 		button btAddSkinBones "拷贝骨骼列表" width:93
-		on btAddSkinBones pressed do 
+		on btAddSkinBones pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "add_Skin_Bones.ms" --函数库
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #addSkinBones
 		)
 		
 		button btSkinTools "蒙皮工具" width:93  across: 2
 		
-		on btSkinTools pressed do 
+		on btSkinTools pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/skinTools.ms"  --权重蒙皮工具
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #skinTools
 		)
 
 		
 		button btn_weightCopy "权重缝合" width:93
-		on btn_weightCopy pressed do 
+		on btn_weightCopy pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/copy_paste_skin_weight.ms"  --打开身体绑定界面
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #copySkinWeights
 		)
 	)
 	
@@ -384,28 +367,22 @@ rollout AniTools "动作工具"
 		(
 			BipedFunctions.boneScale()
 		)
-		on btTwistCreate  pressed do 
+		on btTwistCreate  pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/TwistBones.ms"
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #twistBones
 		)
 		button btCheakName "重名检查" height:21 width:93 tooltip:"检查场景中的重名物体"  across:2
 		
 		button btRestoreBiped "还原外观"  height:21 width:93
-		on btRestoreBiped pressed do 
+		on btRestoreBiped pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/还原bip的外观和修改器.mse"  --biped外观还原
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #restoreBiped
 		)
 		
-		on btCheakName pressed do 
+		on btCheakName pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/选择同名物体.ms"  --biped外观还原
-			fileIn rulesScript
-				
+			::CGH_ToolRegistry.loadTool #selectSameName
+
 			errorObj  = for obj in objects where (classof obj == BoneGeometry and obj.scale.x <0 ) collect obj 
 				
 			if errorObj.count != 0 then 
@@ -429,11 +406,9 @@ rollout AniTools "动作工具"
 		)
 		
 		button btnFaceRig "表情绑定辅助工具" height:21 width:205
-		on btnFaceRig pressed do 
+		on btnFaceRig pressed do
 		(
-			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/animcraft_float_Script_edit.ms"  --biped外观还原
-			fileIn rulesScript
+			::CGH_ToolRegistry.loadTool #animcraftFloat
 		)
 			
 		
@@ -471,4 +446,4 @@ rollout AniTools "动作工具"
 
 
 )
-CreateDialog AniTools  width:240 
+CreateDialog AniTools  width:240
