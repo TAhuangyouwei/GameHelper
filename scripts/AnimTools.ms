@@ -1,23 +1,23 @@
-currentFolder = getFilenamePath (getThisScriptFilename())
-HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "HYW_Scripts_Library.ms" --º¯Êı¿â
+ï»¿currentFolder = getFilenamePath (getThisScriptFilename())
+HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "HYW_Scripts_Library.ms" --å‡½æ•°åº“
 fileIn HYW_Scripts_Library_rulesScript
 
 
 
 try (DestroyDialog AniTools ) catch ()
-rollout AniTools "¶¯×÷¹¤¾ß"
+rollout AniTools "åŠ¨ä½œå·¥å…·"
 (
 		
 		
-	group "Ä£ĞÍ²ÄÖÊ¹æ·¶"
+	group "æ¨¡å‹æè´¨è§„èŒƒ"
 	(
-		button btResetMat "ÖØÖÃ²ÄÖÊ±à¼­Æ÷"  height:21 width:93 tooltip:"ÖØÖÃ²ÄÖÊÇò£¬ÇĞ»»ÎªÏßÉ¨ÃèäÖÈ¾Æ÷" across:2
-		button bnResetModelMat "ÖØÖÃÄ£ĞÍ"  	height:21 width:93 tooltip:"Ö»×÷ÓÃÓÚEditable_PolyÎïÌå£¬×ó¼üÖáµãÔÚÔ­µã£¬ÓÒ¼üÖáµãÔÚÎïÌåÖĞĞÄ"
-		on btResetMat pressed do --ÖØÖÃ²ÄÖÊ±à¼­Æ÷
+		button btResetMat "é‡ç½®æè´¨ç¼–è¾‘å™¨"  height:21 width:93 tooltip:"é‡ç½®æè´¨çƒï¼Œåˆ‡æ¢ä¸ºçº¿æ‰«ææ¸²æŸ“å™¨" across:2
+		button bnResetModelMat "é‡ç½®æ¨¡å‹"  	height:21 width:93 tooltip:"åªä½œç”¨äºEditable_Polyç‰©ä½“ï¼Œå·¦é”®è½´ç‚¹åœ¨åŸç‚¹ï¼Œå³é”®è½´ç‚¹åœ¨ç‰©ä½“ä¸­å¿ƒ"
+		on btResetMat pressed do --é‡ç½®æè´¨ç¼–è¾‘å™¨
 		(
 			MaterialUtilities.resetMeditMaterials()
 		)
-		on bnResetModelMat pressed do  --×ó¼üµã»÷Ä£ĞÍÖáµãÔÚÔ­µã
+		on bnResetModelMat pressed do  --å·¦é”®ç‚¹å‡»æ¨¡å‹è½´ç‚¹åœ¨åŸç‚¹
 		(
 			ModelUtilities.ResetMaterialsOfModel()
 		)
@@ -25,62 +25,62 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 		on bnResetModelMat rightclick do 
 		(
 			ModelUtilities.ResetMaterialsOfModel applyCenterPivot:true
-		)			--ÓÒ¼üÖáµã¾ÓÖĞÄ£ĞÍ
+		)			--å³é”®è½´ç‚¹å±…ä¸­æ¨¡å‹
 		
-		button btClearMat "Çå³ı²ÄÖÊ"  height:21 width:93  tooltip:"Çå³ıÑ¡ÔñÎïÌåµÄ²ÄÖÊ»òÕßËùÓĞÎïÌåµÄ²ÄÖÊ" across:2 --ÇåÀí²ÄÖÊ   
+		button btClearMat "æ¸…é™¤æè´¨"  height:21 width:93  tooltip:"æ¸…é™¤é€‰æ‹©ç‰©ä½“çš„æè´¨æˆ–è€…æ‰€æœ‰ç‰©ä½“çš„æè´¨" across:2 --æ¸…ç†æè´¨   
 		
 		on btClearMat pressed do 
 		(
 			MaterialUtilities.clearMaterials()
 		)
 		
-		button btClearScene "ÇåÀí³¡¾°"   height:21 width:93
+		button btClearScene "æ¸…ç†åœºæ™¯"   height:21 width:93
 		
 		on btClearScene pressed do 
 		(
 			SceneUtilities.cleanScene()
 		)
 		
-		checkbutton btcreateFloor "´´½¨µØÃæ" height:21 width:93 across:2
+		checkbutton btcreateFloor "åˆ›å»ºåœ°é¢" height:21 width:93 across:2
 		
 		on btcreateFloor changed state do
 		if state == on then  SceneUtilities.createFloor state else  SceneUtilities.createFloor state
 		
 		
-		button bt_check "¹æ·¶¼ì²é" height:21 width:93  tooltip:"¼ì²éÌùÍ¼Í¨µÀÊıÁ¿£¬³¡¾°µ¥Î»£¬Ä£ĞÍËõ·Å¡¢ÖáÏò" 
+		button bt_check "è§„èŒƒæ£€æŸ¥" height:21 width:93  tooltip:"æ£€æŸ¥è´´å›¾é€šé“æ•°é‡ï¼Œåœºæ™¯å•ä½ï¼Œæ¨¡å‹ç¼©æ”¾ã€è½´å‘" 
 		
 		on bt_check pressed do 
 		( 
 
-			SceneUtilities.mapChannelNum() --¼ì²éÄ£ĞÍÌùÍ¼Í¨µÀÊıÁ¿
-			SceneUtilities.unitCheck()		--¼ì²é³¡¾°µ¥Î»
-			SceneUtilities.scaleCheck()	--¼ì²éÄ£ĞÍÊÇ·ñÓĞËõ·Å
-			SceneUtilities.objAxis() 		--¼ì²éÄ£ĞÍÖáÏòÊÇ·ñYÖáÏòÉÏ
-			SceneUtilities.getModifiers()  --¼ì²é¶àÓàµÄĞŞ¸ÄÆ÷
+			SceneUtilities.mapChannelNum() --æ£€æŸ¥æ¨¡å‹è´´å›¾é€šé“æ•°é‡
+			SceneUtilities.unitCheck()		--æ£€æŸ¥åœºæ™¯å•ä½
+			SceneUtilities.scaleCheck()	--æ£€æŸ¥æ¨¡å‹æ˜¯å¦æœ‰ç¼©æ”¾
+			SceneUtilities.objAxis() 		--æ£€æŸ¥æ¨¡å‹è½´å‘æ˜¯å¦Yè½´å‘ä¸Š
+			SceneUtilities.getModifiers()  --æ£€æŸ¥å¤šä½™çš„ä¿®æ”¹å™¨
 			SceneUtilities.nameCheck()
 		)
 		
-		button btY_Up "YÖáÏòÉÏ" height:21 width:93 across:2
+		button btY_Up "Yè½´å‘ä¸Š" height:21 width:93 across:2
 		on btY_Up pressed do 
 		(
-			-- Èç¹ûÓĞÑ¡ÖĞµÄ¶ÔÏó£¬Ôò´¦ÀíËüÃÇ
+			-- å¦‚æœæœ‰é€‰ä¸­çš„å¯¹è±¡ï¼Œåˆ™å¤„ç†å®ƒä»¬
 			if selection.count != 0 do
 			(
 				ObjectProcessing.ProcessSelectedObjects()
 			)
 		)
-		button btPointPath "µã¹ì¼£"  height:21 width:93
+		button btPointPath "ç‚¹è½¨è¿¹"  height:21 width:93
 		on btPointPath pressed do 
 		(
 			ModelUtilities.pointPath()
 		)
 
 	)
-		group "ÇúÏß±à¼­Æ÷Ğı×ªÇúÏßÒ»¼ü±©Á¦´òÆ½" --µÚÒ»°æĞèÊÖ¶¯ĞŞ¸´
+		group "æ›²çº¿ç¼–è¾‘å™¨æ—‹è½¬æ›²çº¿ä¸€é”®æš´åŠ›æ‰“å¹³" --ç¬¬ä¸€ç‰ˆéœ€æ‰‹åŠ¨ä¿®å¤
 	(
 		radiobuttons btAxis labels:#("X", "Y", "Z")  columns:3 across:2
-		edittext btValue "Ä¿±êÖµ:"  fieldWidth:60
-		button btConfirm "È·ÈÏ" tooltip:"¿ÉÄÜ»áÒıÆğĞı×ª»¬¶¯" width:100
+		edittext btValue "ç›®æ ‡å€¼:"  fieldWidth:60
+		button btConfirm "ç¡®è®¤" tooltip:"å¯èƒ½ä¼šå¼•èµ·æ—‹è½¬æ»‘åŠ¨" width:100
 		on btConfirm pressed do 
 		(
 			saveMaxFile "C:\\Users\\pc\\Documents\\3ds Max 2021\\autoback\\maxhold.mx"            
@@ -120,68 +120,68 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 	
 	-------------------------------------------------------------------------------------------------------------------
 	
-		group "¿ì½İ¹¤¾ß"
+		group "å¿«æ·å·¥å…·"
 	(
-		button btprogram "´úÂëÊÓÍ¼" height:21 width:93 across: 2
+		button btprogram "ä»£ç è§†å›¾" height:21 width:93 across: 2
 		
 		on btprogram pressed do 
 		(
 			ViewportUtilities.ProgrammeView()
 		)
-		button restore "¶¯»­ÊÓÍ¼"	height:21 width:93
+		button restore "åŠ¨ç”»è§†å›¾"	height:21 width:93
 		
 		on restore pressed do 
 		(
 			ViewportUtilities.AnimView()
 		)
 		
-		button btQuickLook "²é¿´µ¼³öºÏ²¢ÎÄ¼ş" height:21 width:200
+		button btQuickLook "æŸ¥çœ‹å¯¼å‡ºåˆå¹¶æ–‡ä»¶" height:21 width:200
 		
 		on btQuickLook pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/²é¿´ºÏ²¢µ¼³ö²å¼ş.ms"  --maxÎÄ¼ş²é¿´Æ÷
+			rulesScript = pathConfig.appendPath currentFolder "/æŸ¥çœ‹åˆå¹¶å¯¼å‡ºæ’ä»¶.ms"  --maxæ–‡ä»¶æŸ¥çœ‹å™¨
 			fileIn rulesScript
 		)
 		
 
 		
-		checkbutton cbt_click "¼ôÓ°" height:21 width:93 across: 2
+		checkbutton cbt_click "å‰ªå½±" height:21 width:93 across: 2
 		
 		on cbt_click changed state do
 		(
 			InterfaceUtilities.Silhouette_Viewer()
 		)
-		button btFBXtoBip "FBX×ªBip" height:21 width:93 enabled:(RolloutUiUtilities.widgetState()) tooltip:"Ö§³Ö2021¼°ÒÔÏÂ°æ±¾"
+		button btFBXtoBip "FBXè½¬Bip" height:21 width:93 enabled:(RolloutUiUtilities.widgetState()) tooltip:"æ”¯æŒ2021åŠä»¥ä¸‹ç‰ˆæœ¬"
 		
 		on btFBXtoBip pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/AutoFbxtoBip v1.4.mse"  --FBX×ªBip
+			rulesScript = pathConfig.appendPath currentFolder "/AutoFbxtoBip v1.4.mse"  --FBXè½¬Bip
 			fileIn rulesScript
 1
 		)
-		button bt_TCB_Continuity  "TCB_Continuity" width:93 tooltip:"×ó¼ü¶ÔÑ¡ÖĞµÄÖ¡ÉèÖÃ Îª0£¬ÓÒ¼üÉèÖÃÎª25" across:2 width:93
+		button bt_TCB_Continuity  "TCB_Continuity" width:93 tooltip:"å·¦é”®å¯¹é€‰ä¸­çš„å¸§è®¾ç½® ä¸º0ï¼Œå³é”®è®¾ç½®ä¸º25" across:2 width:93
 
 		
 		on bt_TCB_Continuity pressed do 
 		(
 			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj 
-			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 0  -- ÉèÖÃÎª0
+			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 0  -- è®¾ç½®ä¸º0
 		)
 		
 		on bt_TCB_Continuity rightclick do 
 		(
 			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj 
-			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 25  -- ÉèÖÃÎª25
+			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 25  -- è®¾ç½®ä¸º25
 		)
 		
 		button bt_Auto_TCB "AUTO TCB"  width:93 		
 		on bt_Auto_TCB pressed do 
 		(
-			local tolerance = 0.01 -- ¶¨ÒåÒ»¸öĞ¡µÄÈİÈÌ¶ÈÖµ
+			local tolerance = 0.01 -- å®šä¹‰ä¸€ä¸ªå°çš„å®¹å¿åº¦å€¼
 			
-			-- ¼ì²éµ±Ç°Ñ¡ÔñÊÇ·ñÎª¿Õ
+			-- æ£€æŸ¥å½“å‰é€‰æ‹©æ˜¯å¦ä¸ºç©º
 			if selection.count == 0 do
 			(
 				local bipedParts = #("Bip001 L Hand", "Bip001 R Hand", "Bip001 R Foot", "Bip001 L Foot","Bip001 Spine1","Bip001")
@@ -198,11 +198,11 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 		)
 		
 
-		button bt_animRange "Ö¡Êı±í×ª»»" width:200  tooltips:"unityºÍmax¸ñÊ½×ª»»"
+		button bt_animRange "å¸§æ•°è¡¨è½¬æ¢" width:200  tooltips:"unityå’Œmaxæ ¼å¼è½¬æ¢"
 		on bt_animRange pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/Process_text_file_for_animation_range.ms"  --FBX×ªBip
+			rulesScript = pathConfig.appendPath currentFolder "/Process_text_file_for_animation_range.ms"  --FBXè½¬Bip
 			fileIn rulesScript
 		)
 		
@@ -212,9 +212,9 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 		
 		
 		
-		Dropdownlist BoneColorList "¹Ç÷ÀÑÕÉ«ÁĞ±í" items:#("red-ÑÛ¾¦","green-È¹×Ó","blue-Í··¢","white-ÆäËü","black-Ä©¶Ë¹Ç","orange-ÎäÆ÷","yellow-Åû·ç","brown-Ğä×Ó","gray-ĞØ") selection:1 height:10 toolTip:"¹Ç÷À¿ÉÑ¡ÑÕÉ«ÁĞ±í"
+		Dropdownlist BoneColorList "éª¨éª¼é¢œè‰²åˆ—è¡¨" items:#("red-çœ¼ç›","green-è£™å­","blue-å¤´å‘","white-å…¶å®ƒ","black-æœ«ç«¯éª¨","orange-æ­¦å™¨","yellow-æŠ«é£","brown-è¢–å­","gray-èƒ¸") selection:1 height:10 toolTip:"éª¨éª¼å¯é€‰é¢œè‰²åˆ—è¡¨"
 		
-		button BoneWireColor "È·ÈÏ" width:90
+		button BoneWireColor "ç¡®è®¤" width:90
 		
 		on BoneWireColor pressed do 
 		(
@@ -240,41 +240,41 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 			)		
 		)
 		
-		button btBoneDivider "¹Ç÷ÀÇĞ·Ö¹¤¾ß"  height:21 width:93 across:2
+		button btBoneDivider "éª¨éª¼åˆ‡åˆ†å·¥å…·"  height:21 width:93 across:2
 		
 		on btBoneDivider pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/bonedivider.ms"  --FBX×ªBip
+			rulesScript = pathConfig.appendPath currentFolder "/bonedivider.ms"  --FBXè½¬Bip
 			fileIn rulesScript
 		)
 
-		button btCopyTrans "¹ì¼£¿½±´" height:21 width:93  
+		button btCopyTrans "è½¨è¿¹æ‹·è´" height:21 width:93  
 		
 		on btCopyTrans pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/¸´ÖÆÎïÌåÔË¶¯¹ì¼£.ms"  --FBX×ªBip
+			rulesScript = pathConfig.appendPath currentFolder "/å¤åˆ¶ç‰©ä½“è¿åŠ¨è½¨è¿¹.ms"  --FBXè½¬Bip
 			fileIn rulesScript
 		)
 		
 		
-		button btRecoder "²Î¿¼´óÊ¦"  height:21 width:93 across:2
+		button btRecoder "å‚è€ƒå¤§å¸ˆ"  height:21 width:93 across:2
 		
 		on btRecoder pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/²Î¿¼´óÊ¦v1.06.mse"  --»Ö¸´ÃÉÆ¤pose
+			rulesScript = pathConfig.appendPath currentFolder "/å‚è€ƒå¤§å¸ˆv1.06.mse"  --æ¢å¤è’™çš®pose
 			fileIn rulesScript
 		)
 		
-		button btRepair "ÂÒÂëĞŞ¸´Repair"  height:21 width:93 tooltip:"ĞŞ¸´½çÃæÂÒÂëÎÊÌâ"
+		button btRepair "ä¹±ç ä¿®å¤Repair"  height:21 width:93 tooltip:"ä¿®å¤ç•Œé¢ä¹±ç é—®é¢˜"
 		
 		on btRepair pressed do
 		(
 			InterfaceUtilities.SetDefaultLanguageToChinese()
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/AnimTools.ms"  --FBX×ªBip
+			rulesScript = pathConfig.appendPath currentFolder "/AnimTools.ms"  --FBXè½¬Bip
 			fileIn rulesScript
 			
 		)			
@@ -282,103 +282,103 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 		
 
 	)
-	group "°ó¶¨¹¤¾ß"
+	group "ç»‘å®šå·¥å…·"
 	(
-		button btObjLayer "µ÷Õû²ã¼¶" height:21 width:93 across: 2  tooltip:"°Ñ²»Í¬ÊôĞÔµÄÎïÌå·ÅÈë²»Í¬µÄ²ã¼¶,×ó¼üÆÕÍ¨·Ö²ã£¬ÓÒ¼ü±íÇé°ó¶¨·Ö²ã"   across:2
+		button btObjLayer "è°ƒæ•´å±‚çº§" height:21 width:93 across: 2  tooltip:"æŠŠä¸åŒå±æ€§çš„ç‰©ä½“æ”¾å…¥ä¸åŒçš„å±‚çº§,å·¦é”®æ™®é€šåˆ†å±‚ï¼Œå³é”®è¡¨æƒ…ç»‘å®šåˆ†å±‚"   across:2
 		
 		on btObjlayer pressed do 
 		(
 			LayerUtilities.AddObjectsToLayer()
 		)
 		
-		button bt_clearNullLayer "ÇåÀí¿Õ²ã"  height:21 width:93
+		button bt_clearNullLayer "æ¸…ç†ç©ºå±‚"  height:21 width:93
 		on bt_clearNullLayer pressed do 
 		(
 			LayerUtilities.DeleteEmptyLayers()
 		)
 		
-		button bt_resetSkinPose "»Ö¸´ÃÉÆ¤pose" height:21 width:93 across: 2  tooltip:"»Ö¸´µ½Tpose"
+		button bt_resetSkinPose "æ¢å¤è’™çš®pose" height:21 width:93 across: 2  tooltip:"æ¢å¤åˆ°Tpose"
 		
 		on bt_resetSkinPose pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/ÖØÖÃÃÉÆ¤pose V1.1.mse"  --»Ö¸´ÃÉÆ¤pose
+			rulesScript = pathConfig.appendPath currentFolder "/é‡ç½®è’™çš®pose V1.1.mse"  --æ¢å¤è’™çš®pose
 			fileIn rulesScript
 		)
-		button bt_CombineSkin "ÃÉÆ¤²ğ·ÖºÏ²¢"  height:21 width:93   tooltip:"ºÏ²¢Ê±Ã¿´ÎÑ¡ÔñÁ½¸öÎïÌå"
+		button bt_CombineSkin "è’™çš®æ‹†åˆ†åˆå¹¶"  height:21 width:93   tooltip:"åˆå¹¶æ—¶æ¯æ¬¡é€‰æ‹©ä¸¤ä¸ªç‰©ä½“"
 		
 		on bt_CombineSkin pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/Rigging_CombineSkin.ms"  --ÃÉÆ¤²ğ·ÖºÏ²¢
+			rulesScript = pathConfig.appendPath currentFolder "/Rigging_CombineSkin.ms"  --è’™çš®æ‹†åˆ†åˆå¹¶
 			fileIn rulesScript
 		)
 		
-		button bt_facialRig  "±íÇé°ó¶¨"  height:21 width:93  across:2  tooltip:"±íÇé°ó¶¨¹¤¾ß"
+		button bt_facialRig  "è¡¨æƒ…ç»‘å®š"  height:21 width:93  across:2  tooltip:"è¡¨æƒ…ç»‘å®šå·¥å…·"
 		
 		on bt_facialRig pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/facialRig_UI.ms"  --´ò¿ª±íÇé°ó¶¨½çÃæ
+			rulesScript = pathConfig.appendPath currentFolder "/facialRig_UI.ms"  --æ‰“å¼€è¡¨æƒ…ç»‘å®šç•Œé¢
 			fileIn rulesScript
 		)
 		
-		button bt_bodylRig  "ÉíÌå°ó¶¨"  height:21 width:93    tooltip:"ÉíÌå°ó¶¨¹¤¾ß"
+		button bt_bodylRig  "èº«ä½“ç»‘å®š"  height:21 width:93    tooltip:"èº«ä½“ç»‘å®šå·¥å…·"
 		
 		on bt_bodylRig pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/×Ô¶¨Òå¹Ç÷À°ó¶¨.ms"  --´ò¿ªÉíÌå°ó¶¨½çÃæ
+			rulesScript = pathConfig.appendPath currentFolder "/è‡ªå®šä¹‰éª¨éª¼ç»‘å®š.ms"  --æ‰“å¼€èº«ä½“ç»‘å®šç•Œé¢
 			fileIn rulesScript
 		)
 		
-		button reNameNub "ÃüÃûÄ©¶Ë" height:21 width:93 tooltip:"bone¹Ç÷ÀÄ©¶Ë¹ÇÖØÃüÃû"  across: 2
+		button reNameNub "å‘½åæœ«ç«¯" height:21 width:93 tooltip:"boneéª¨éª¼æœ«ç«¯éª¨é‡å‘½å"  across: 2
 		on reNameNub pressed do 
 		(
 			BoneUtilities.RenameBoneNub()
 		)
 		
-		button btAddSkinBones "¿½±´¹Ç÷ÀÁĞ±í" width:93
+		button btAddSkinBones "æ‹·è´éª¨éª¼åˆ—è¡¨" width:93
 		on btAddSkinBones pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "add_Skin_Bones.ms" --º¯Êı¿â
+			rulesScript = pathConfig.appendPath currentFolder "add_Skin_Bones.ms" --å‡½æ•°åº“
 			fileIn rulesScript
 		)
 		
-		button btSkinTools "ÃÉÆ¤¹¤¾ß" width:93  across: 2
+		button btSkinTools "è’™çš®å·¥å…·" width:93  across: 2
 		
 		on btSkinTools pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/skinTools.ms"  --È¨ÖØÃÉÆ¤¹¤¾ß
+			rulesScript = pathConfig.appendPath currentFolder "/skinTools.ms"  --æƒé‡è’™çš®å·¥å…·
 			fileIn rulesScript
 		)
 
 		
-		button btn_weightCopy "È¨ÖØ·ìºÏ" width:93
+		button btn_weightCopy "æƒé‡ç¼åˆ" width:93
 		on btn_weightCopy pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/copy_paste_skin_weight.ms"  --´ò¿ªÉíÌå°ó¶¨½çÃæ
+			rulesScript = pathConfig.appendPath currentFolder "/copy_paste_skin_weight.ms"  --æ‰“å¼€èº«ä½“ç»‘å®šç•Œé¢
 			fileIn rulesScript
 		)
 	)
 	
 	group "biped"
 	(
-		button btQuater "ËÄÔªÊı" height:21 width:93 across:2 tooltip:"ÇĞ»»µ½QuaterÇúÏßÄ£Ê½"
-		button btBipScale "BipËõ·Å"  height:21 width:93 tooltip:"Ö»×÷ÓÃÓÚÑ¡ÖĞµÄbip¹Ç÷À,×ó¼ü¿ªÆô£¬ÓÒ¼ü¹Ø±Õ"
-		button btBoneScale "¹Ç÷ÀÆ¥Åä"  height:21 width:93  across:2
-		button btTwistCreate "Å¤Çú¹Ç÷À" height:21 width:93 tooltip:"´´½¨Å¤Çú¹Ç÷À" 
+		button btQuater "å››å…ƒæ•°" height:21 width:93 across:2 tooltip:"åˆ‡æ¢åˆ°Quateræ›²çº¿æ¨¡å¼"
+		button btBipScale "Bipç¼©æ”¾"  height:21 width:93 tooltip:"åªä½œç”¨äºé€‰ä¸­çš„bipéª¨éª¼,å·¦é”®å¼€å¯ï¼Œå³é”®å…³é—­"
+		button btBoneScale "éª¨éª¼åŒ¹é…"  height:21 width:93  across:2
+		button btTwistCreate "æ‰­æ›²éª¨éª¼" height:21 width:93 tooltip:"åˆ›å»ºæ‰­æ›²éª¨éª¼" 
 		
 		on btQuater pressed do 
 		(
 			BipedFunctions.BipedEulerQuarter()
 		)
-		on btBipScale pressed do BipedFunctions.BipedScaleOn() --×ó¼ü¿ªÆôËõ·Å
+		on btBipScale pressed do BipedFunctions.BipedScaleOn() --å·¦é”®å¼€å¯ç¼©æ”¾
 		
-		on btBipScale rightClick do BipedFunctions.BipedScaleOff()  --ÓÒ¼ü¹Ø±ÕËõ·Å
+		on btBipScale rightClick do BipedFunctions.BipedScaleOff()  --å³é”®å…³é—­ç¼©æ”¾
 		
 		on btBoneScale pressed do 
 		(
@@ -390,27 +390,27 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 			rulesScript = pathConfig.appendPath currentFolder "/TwistBones.ms"
 			fileIn rulesScript
 		)
-		button btCheakName "ÖØÃû¼ì²é" height:21 width:93 tooltip:"¼ì²é³¡¾°ÖĞµÄÖØÃûÎïÌå"  across:2
+		button btCheakName "é‡åæ£€æŸ¥" height:21 width:93 tooltip:"æ£€æŸ¥åœºæ™¯ä¸­çš„é‡åç‰©ä½“"  across:2
 		
-		button btRestoreBiped "»¹Ô­Íâ¹Û"  height:21 width:93
+		button btRestoreBiped "è¿˜åŸå¤–è§‚"  height:21 width:93
 		on btRestoreBiped pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/»¹Ô­bipµÄÍâ¹ÛºÍĞŞ¸ÄÆ÷.mse"  --bipedÍâ¹Û»¹Ô­
+			rulesScript = pathConfig.appendPath currentFolder "/è¿˜åŸbipçš„å¤–è§‚å’Œä¿®æ”¹å™¨.mse"  --bipedå¤–è§‚è¿˜åŸ
 			fileIn rulesScript
 		)
 		
 		on btCheakName pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/Ñ¡ÔñÍ¬ÃûÎïÌå.ms"  --bipedÍâ¹Û»¹Ô­
+			rulesScript = pathConfig.appendPath currentFolder "/é€‰æ‹©åŒåç‰©ä½“.ms"  --bipedå¤–è§‚è¿˜åŸ
 			fileIn rulesScript
 				
 			errorObj  = for obj in objects where (classof obj == BoneGeometry and obj.scale.x <0 ) collect obj 
 				
 			if errorObj.count != 0 then 
 			(
-				messageBox "·¢ÏÖ¹Ç÷À´íÎóµÄÎïÌå"
+				messageBox "å‘ç°éª¨éª¼é”™è¯¯çš„ç‰©ä½“"
 				selectmore errorObj
 			)
 
@@ -418,9 +418,9 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 		)
 	) 
 	
-	group "¿ì½İ¹¤¾ß"
+	group "å¿«æ·å·¥å…·"
 	(
-		button bt_wh "¹¤¾ßÊé" height:21 width:205  tooltip:"ÊÊÓÃÓÚmax2008Ö®Ç°µÄ°æ±¾"  --across: 2
+		button bt_wh "å·¥å…·ä¹¦" height:21 width:205  tooltip:"é€‚ç”¨äºmax2008ä¹‹å‰çš„ç‰ˆæœ¬"  --across: 2
 		
 		on bt_wh pressed do 
 		(
@@ -428,28 +428,28 @@ rollout AniTools "¶¯×÷¹¤¾ß"
 			ShellLaunch currentFolder ""
 		)
 		
-		button btnFaceRig "±íÇé°ó¶¨¸¨Öú¹¤¾ß" height:21 width:205
+		button btnFaceRig "è¡¨æƒ…ç»‘å®šè¾…åŠ©å·¥å…·" height:21 width:205
 		on btnFaceRig pressed do 
 		(
 			currentFolder = getFilenamePath (getThisScriptFilename())
-			rulesScript = pathConfig.appendPath currentFolder "/animcraft_float_Script_edit.ms"  --bipedÍâ¹Û»¹Ô­
+			rulesScript = pathConfig.appendPath currentFolder "/animcraft_float_Script_edit.ms"  --bipedå¤–è§‚è¿˜åŸ
 			fileIn rulesScript
 		)
 			
 		
 		
 		
-		button btnShowImage  "Author:HYW £¬ÁªÏµ×÷Õß£¬·´À¡±¨´í£¡  " height:21 width:205
+		button btnShowImage  "Author:HYW ï¼Œè”ç³»ä½œè€…ï¼Œåé¦ˆæŠ¥é”™ï¼  " height:21 width:205
 
 		on btnShowImage pressed do
 		(
-			-- Ê¹ÓÃDotNetÀà½«Base64×Ö·û´®½âÂëÎª×Ö½ÚÊı×é
+			-- ä½¿ç”¨DotNetç±»å°†Base64å­—ç¬¦ä¸²è§£ç ä¸ºå­—èŠ‚æ•°ç»„
 			byteArray = (dotnetclass "System.Convert").FromBase64String(encodedString)
 
-			-- ´´½¨Ò»¸öĞÂµÄÄÚ´æÁ÷
+			-- åˆ›å»ºä¸€ä¸ªæ–°çš„å†…å­˜æµ
 			memoryStream = dotNetObject "System.IO.MemoryStream" byteArray
 
-			-- Ê¹ÓÃÄÚ´æÁ÷´´½¨BitmapÍ¼Æ¬
+			-- ä½¿ç”¨å†…å­˜æµåˆ›å»ºBitmapå›¾ç‰‡
 			global decodedImage
 			decodedImage = (dotnetobject "System.Drawing.Bitmap" memoryStream)
 
