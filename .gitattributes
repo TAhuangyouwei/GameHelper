@@ -1,0 +1,11 @@
+# 3ds Max scenes are binary assets and should not inflate normal Git history.
+*.max filter=lfs diff=lfs merge=lfs -text
+
+# Encrypted MAXScript files are binary.
+*.mse binary
+
+# Keep source and documentation line endings stable across Windows editors.
+*.ms text eol=crlf
+*.md text eol=lf
+*.txt text eol=crlf
+

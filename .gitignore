@@ -1,0 +1,16 @@
+# Generated exports and renders
+/output/exports/*
+/output/renders/*
+
+# 3ds Max temporary and backup files
+*.bak
+*.tmp
+*.autosave
+*.max.bak
+
+# Windows/editor noise
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
