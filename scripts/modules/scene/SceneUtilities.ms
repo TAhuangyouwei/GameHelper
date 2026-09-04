@@ -94,12 +94,37 @@ struct SceneUtilities
 	--检查多余的修改器
 	fn getModifiers =
 	(
-		objs = for obj in geometry where (obj.modifiers.count > 1) or (obj.modifiers.count > 0 and obj.modifiers[#skin] == undefined) collect obj
-		if objs.count != 0 then
+		local objectsWithUnexpectedModifiers = #()
+
+		for obj in geometry do
 		(
-			cd = queryBox ("有多余修改器的物体数量有" + (objs.count as string) + "个，是否选中有问题的模型")
-			if cd == true then selectmore objs
+			local modifierCount = obj.modifiers.count
+			local hasUnexpectedModifier =
+				modifierCount > 1 or
+				(
+					modifierCount == 1 and
+					classof obj.modifiers[1] != Skin
+				)
+
+			if hasUnexpectedModifier do
+				append objectsWithUnexpectedModifiers obj
 		)
+
+		if objectsWithUnexpectedModifiers.count > 0 then
+		(
+			local shouldSelect = queryBox
+			(
+				"发现存在多余修改器的模型，共有" +
+				(objectsWithUnexpectedModifiers.count as string) +
+				"个。\n\n允许的情况：没有修改器，或者只有一个 Skin。\n\n是否选中这些模型？"
+			)
+
+			if shouldSelect do
+				selectMore objectsWithUnexpectedModifiers
+		)
+
+		-- 返回检查结果，方便其他工具继续使用。
+		objectsWithUnexpectedModifiers
 	),
 
     -- 检查模型轴向是否Y轴向上
