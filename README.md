@@ -12,6 +12,7 @@ GameHelper 是一组用于 3ds Max 的 MAXScript 工具，涵盖动画、绑定�
 
 ## 整理文档
 
+- [新手接手与修改指南](docs/BEGINNERS_GUIDE.md)
 - [脚本清单](docs/SCRIPT_CATALOG.md)
 - [依赖关系](docs/DEPENDENCY_MAP.md)
 - [分阶段整理计划](docs/REORGANIZATION_PLAN.md)
@@ -22,7 +23,7 @@ GameHelper 是一组用于 3ds Max 的 MAXScript 工具，涵盖动画、绑定�
 2. 不删除来源未确认的脚本，先移动到归档或第三方区域。
 3. 会批量打开、修改并保存 .max 的脚本，完成备份、预检和日志功能前，不直接对正式资产运行。
 4. .mse 和混淆脚本视为发布产物或不透明依赖，不当作可维护源码。
-5. 测试场景使用 Git LFS 管理，避免普通 Git 历史被二进制文件撑大。
+5. tests/test_scenes 下的测试场景只保存在本地并由 .gitignore 排除，不上传到公开仓库；其他允许提交的 .max 才使用 Git LFS。
 
 ## 当前目录
 
@@ -33,4 +34,3 @@ GameHelper 是一组用于 3ds Max 的 MAXScript 工具，涵盖动画、绑定�
     scenes/    场景资料
     scripts/   当前脚本源码与历史脚本
     tests/     自动化脚本和测试场景
-

@@ -26,7 +26,7 @@ rollout AniTools "动作工具"
 		button bnResetModelMat "重置模型"  	height:21 width:93 tooltip:"只作用于Editable_Poly物体，左键轴点在原点，右键轴点在物体中心"
 		on btResetMat pressed do --重置材质编辑器
 		(
-			MaterialUtilities.resetMeditMaterials()
+			MaterialUtilities.resetCompactMaterialSlots ()
 		)
 		on bnResetModelMat pressed do  --左键点击模型轴点在原点
 		(
@@ -38,11 +38,11 @@ rollout AniTools "动作工具"
 			ModelUtilities.ResetMaterialsOfModel applyCenterPivot:true
 		)			--右键轴点居中模型
 		
-		button btClearMat "清除材质"  height:21 width:93  tooltip:"清除选择物体的材质或者所有物体的材质" across:2 --清理材质   
+		button btClearMat "清除材质"  height:21 width:93  tooltip:"清除所选择的物体的材质" across:2 --清理材质
 		
 		on btClearMat pressed do 
 		(
-			MaterialUtilities.clearMaterials()
+			MaterialUtilities.clearSelectedMaterials()
 		)
 		
 		button btClearScene "清理场景"   height:21 width:93
@@ -87,44 +87,14 @@ rollout AniTools "动作工具"
 		)
 
 	)
-		group "曲线编辑器旋转曲线一键暴力打平" --第一版需手动修复
+	group "曲线编辑器旋转曲线一键暴力打平" --第一版需手动修复
 	(
 		radiobuttons btAxis labels:#("X", "Y", "Z")  columns:3 across:2
-		edittext btValue "目标值:"  fieldWidth:60
+		edittext btValue "目标值:" text:"0" fieldWidth:60
 		button btConfirm "确认" tooltip:"可能会引起旋转滑动" width:100
 		on btConfirm pressed do 
 		(
-			saveMaxFile "C:\\Users\\pc\\Documents\\3ds Max 2021\\autoback\\maxhold.mx"            
-			animate on 
-			if selection.count != 0 then 
-			(
-				for obj in selection do 
-				(
-					local keys = obj.rotation.controller.keys
-					local numKeys = keys.count
-					for i = 1 to numKeys do 
-					(
-						local keyTime = getKeyTime obj.rotation.controller i
-						
-						local val = btValue.text as integer
-						if keyTime >= animationRange.start and keyTime <= animationRange.end then
-						(
-							if btAxis.state == 1 then 
-							(
-								at time keyTime obj.rotation.controller[1].value = val
-							)
-							else if btAxis.state == 2 then 
-							(
-								at time keyTime obj.rotation.controller[2].value = val
-							)
-							else if btAxis.state == 3 then 
-							(
-								at time keyTime obj.rotation.controller[3].value = val
-							)
-						)
-					)
-				)
-			)
+			::AnimationUtilities.flattenRotationAxisKeys (selection as array) btAxis.state btValue.text
 		)
 
 	)
