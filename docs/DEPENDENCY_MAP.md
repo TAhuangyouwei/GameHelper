@@ -41,8 +41,11 @@
 
 ## 公共库依赖
 
-    自定义骨骼绑定.ms ──> HYW_Scripts_Library.ms
+    自定义骨骼绑定.ms ──> HYW_Scripts_Library.ms ──> modules/material/MaterialUtilities.ms
     AnimTools.ms ──> CGH_ToolRegistry.ms ──> HYW_Scripts_Library.ms
+                                                  └─> modules/material/MaterialUtilities.ms
+
+`MaterialUtilities` 已从公共库主体拆出。旧入口仍然有效，所以现有按钮和脚本不需要改调用方式。
 
 查看合并导出插件.ms 顶部的公共库加载代码目前被注释，说明它可能默认由 AnimTools.ms 启动。后续需要决定它是：
 
