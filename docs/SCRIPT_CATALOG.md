@@ -22,7 +22,8 @@
 | 文件 | 用途 | 状态 | 下一步 |
 | --- | --- | --- | --- |
 | AnimTools.ms | 总工具面板，通过统一注册表加载子工具 | 当前核心入口 | 在 3ds Max 中执行按钮冒烟测试 |
-| HYW_Scripts_Library.ms | Biped、材质、模型、场景、图层、UI、骨骼和蒙皮公共函数 | 自写，核心候选 | 最后按现有 struct 边界拆分 |
+| HYW_Scripts_Library.ms | 加载 modules 下全部公共模块，兼容旧入口 | 自写，核心入口 | 保持轻量，不再放具体功能代码 |
+| modules/ 下的分类模块 | Biped、材质、模型、场景、图层、UI、动画和蒙皮公共函数 | 已按原 struct 边界拆分 | 后续逐模块测试和优化，不在搬移提交中改逻辑 |
 | modules/CGH_ToolRegistry.ms | 统一登记和解析所有工具脚本路径 | 自写，加载基础设施 | 移动文件时只更新此注册表 |
 | 目录结构.txt | 早期目录规划 | 归档候选 | 内容合并进正式文档后保留历史记录 |
 
@@ -103,4 +104,4 @@
 
 - 添加头套挂点.ms 与 添加女头套挂点.ms 文件内容完全相同。
 - 接缝焊接脚本.ms 与 copy_paste_skin_weight.ms 都定义了 findModifier、createBoneNameIDMap、ensureAllBonesExist、autoStitchOptimized，适合后续抽入蒙皮公共模块。
-- HYW_Scripts_Library.ms 与 ikfk_v.0.2.ms 都定义了 RotatePivotOnly，整理第三方边界后再决定是否合并。
+- modules/model/ObjectProcessing.ms 与 ikfk_v.0.2.ms 都定义了 RotatePivotOnly，整理第三方边界后再决定是否合并。

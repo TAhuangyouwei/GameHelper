@@ -13,14 +13,17 @@ AnimTools.ms                   主面板，类似遥控器
     |
     +-- CGH_ToolRegistry.ms    地址簿，记录每个工具文件在哪里
     |
-    +-- HYW_Scripts_Library.ms 公共函数库，保存多个按钮共用的能力
+    +-- HYW_Scripts_Library.ms 公共库加载入口
+            |
+            +-- modules/       按材质、绑定、场景等职责保存公共能力
     |
     +-- 其他 .ms/.mse          被按钮打开的具体子工具
 ```
 
 - `AnimTools.ms` 负责显示按钮，以及决定点击按钮后做什么。
 - `CGH_ToolRegistry.ms` 只负责把工具编号对应到脚本路径。
-- `HYW_Scripts_Library.ms` 提供公共函数，例如材质、骨骼、界面和动画相关功能。
+- `HYW_Scripts_Library.ms` 只负责依次加载公共模块，保留旧脚本的入口兼容性。
+- `scripts/modules/` 下的分类文件保存材质、骨骼、界面和动画等真正的公共功能。
 - `FBX批量导出.ms`、`查看合并导出插件.ms` 等文件仍然保存各自真正的业务逻辑。
 
 所以，这次增加注册表不会改变导出规则、合并规则、蒙皮算法或动画算法。
@@ -36,7 +39,7 @@ AnimTools.ms                   主面板，类似遥控器
 ```maxscript
 on btResetMat pressed do
 (
-    MaterialUtilities.ResetMaterialEditor()
+    MaterialUtilities.resetCompactMaterialSlots()
 )
 ```
 
@@ -118,7 +121,8 @@ fileIn rulesScript
 4. 加载注册表
 5. 把 scripts 目录交给注册表作为根目录
 6. 通过注册表加载 HYW_Scripts_Library.ms
-7. 创建 AnimTools 面板
+7. HYW_Scripts_Library.ms 依次加载 modules 下的公共模块
+8. 创建 AnimTools 面板
 ```
 
 对应代码是：
@@ -515,6 +519,7 @@ docs: 补充 FBX 导出使用说明
 可能原因：
 
 - `HYW_Scripts_Library.ms` 没有成功加载；
+- `HYW_Scripts_Library.ms` 提示某个 modules 文件不存在；
 - 公共函数名被修改；
 - 运行了单独代码片段，但没有先运行完整入口；
 - 脚本前面已经报错，后面没有继续执行。

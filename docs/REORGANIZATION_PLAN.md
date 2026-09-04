@@ -93,20 +93,21 @@
 - 单文件日志和错误信息
 - 进度、取消和失败后状态恢复
 
-## 阶段 6：整理公共代码
+## 阶段 6：整理公共代码（第一步已完成）
 
-将 HYW_Scripts_Library.ms 按现有职责拆成：
+HYW_Scripts_Library.ms 已缩减为兼容加载入口，原有结构按职责拆到：
 
-    core/biped.ms
-    core/material.ms
-    core/model.ms
-    core/scene.ms
-    core/layer.ms
-    core/interface.ms
-    core/animation.ms
-    core/skin.ms
+    modules/animation/
+    modules/interface/
+    modules/material/
+    modules/model/
+    modules/rigging/
+    modules/scene/
+    modules/skin/
+    modules/ui/
+    modules/viewport/
 
-同时把跨文件重复函数抽入对应模块，只保留一个 CGH 全局命名空间。
+本次只移动代码，没有修改结构名、函数名或功能逻辑。后续再逐模块处理跨文件重复函数，并评估是否统一到 CGH 全局命名空间。
 
 ## 阶段 7：测试与发布
 
