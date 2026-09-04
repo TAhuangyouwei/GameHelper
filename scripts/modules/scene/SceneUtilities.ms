@@ -5,25 +5,48 @@
 
 struct SceneUtilities
 (
-    -- 选择场景中UV数量大于2的物体
-    fn mapChannelNum =
+    -- 查找具有2号或更高贴图通道的 Editable Poly
+    fn mapChannelNum firstExtraChannel:2 =
     (
-        mapChannelNumTemp = #()
+        local objectsWithExtraMapChannels = #()
+
         for obj in objects where classof obj.baseobject == Editable_Poly do
         (
-            num = polyop.getNumMaps obj
-            if num > 2 then
+            local mapChannelCount = polyop.getNumMaps obj
+            local hasExtraMapChannel = false
+
+            if mapChannelCount > firstExtraChannel then
             (
-                append mapChannelNumTemp obj
+                for mapChannel = firstExtraChannel to (mapChannelCount - 1) do
+                (
+                    if not hasExtraMapChannel then
+                    (
+                        hasExtraMapChannel =
+                            (polyop.getMapSupport obj mapChannel) and
+                            ((polyop.getNumMapVerts obj mapChannel) > 0)
+                    )
+                )
             )
+
+            if hasExtraMapChannel do
+                append objectsWithExtraMapChannels obj
         )
 
-        if mapChannelNumTemp.count != 0 then
+        if objectsWithExtraMapChannels.count > 0 then
         (
-            clearSelection()
-            select mapChannelNumTemp
-            messageBox ("已选中场景中模型UV大于1的模型，共有" + (mapChannelNumTemp.count as string) + "个")
+            local shouldSelect = queryBox
+            (
+                "发现具有额外UV通道的模型，共有" +
+                (objectsWithExtraMapChannels.count as string) +
+                "个，是否选中？"
+            )
+
+            if shouldSelect do
+                select objectsWithExtraMapChannels
         )
+
+        -- 返回检查结果，方便其他工具继续使用。
+        objectsWithExtraMapChannels
     ),
 
     -- 单位检查

@@ -62,7 +62,7 @@ rollout AniTools "动作工具"
 		
 		on bt_check pressed do 
 		( 
-
+			clearSelection()
 			SceneUtilities.mapChannelNum() --检查模型贴图通道数量
 			SceneUtilities.unitCheck()		--检查场景单位
 			SceneUtilities.scaleCheck()	--检查模型是否有缩放
