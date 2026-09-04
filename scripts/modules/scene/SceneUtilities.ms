@@ -65,63 +65,6 @@ struct SceneUtilities
 		)
 	),
 
-	--模型命名检查
-
-	fn nameCheck =
-	(
-		-- 收集所有的几何体对象，这里我们关注的是可编辑多边形
-		nameObjs = for obj in geometry where classof obj.baseobject == Editable_Poly collect obj
-
-		fileNumber = (filterString (getFilenameFile(maxFileName)) "_")
-
-		-- 遍历这些对象
-		for obj in nameObjs do
-		(
-			local errorFound = false
-
-			if (filterString obj.name "_")[1] == fileNumber[1] and (filterString obj.name "_")[2] == fileNumber[2] and (filterString obj.name "_")[3] == fileNumber[3] and errorFound == false then
-			(
-				continue
-			)
-			else
-			(
-				-- 如果所有的条件都不符合，则说明发现了错误
-				messageBox (obj.name + " 命名错误，请检查！")
-				errorFound = true
-			)
-			-- 检查模型是否包含指定的后缀
-			if errorFound == false then
-			(
-				if (findString obj.name "_body" != undefined) then
-				(
-					-- 匹配到正确的名字后缀
-					continue
-				)
-				else if (findString obj.name "_hair" != undefined) then
-				(
-					continue
-				)
-				else if (findString obj.name "_head" != undefined) then
-				(
-					continue
-				)
-
-				else if (findString obj.name "_eyeShadows" != undefined and findString (getFilenameFile(maxFileName)) "_lod" == undefined) then
-				(
-					continue
-				)
-				else
-				(
-					-- 如果所有的条件都不符合，则说明发现了错误
-					messageBox (obj.name + " 命名错误，请检查！")
-					errorFound = true
-				)
-
-			)
-
-		)
-	),
-
     -- 检查模型轴向是否Y轴向上
 	fn objAxis =
 	(
@@ -151,26 +94,78 @@ struct SceneUtilities
 			)
 		)
 	),
-	fn CreateFloor state width:600 height:600 depth:-3 = --添加参数
-    (
-        if state == on then
-        (
-            local layer = LayerManager.getLayerFromName "floor"
-            if layer == undefined then
-            (
-                layer = LayerManager.newLayerFromName "floor"
-            )
+	fn isGameHelperFloor node =
+	(
+		(isValidNode node) and ((getUserProp node "CGH_GameHelperFloor") == true)
+	),
+	fn getGameHelperFloors =
+	(
+		for obj in objects where isGameHelperFloor obj collect obj
+	),
+	fn CreateFloor state width:600 height:600 depth:-3 =
+	(
+		local floorLayerName = "floor"
+		local animFloors = getGameHelperFloors()
 
-            local animFloor = box length:width width:height height:depth name:"Floor"
-            animFloor.mat = standard()
-            layer.addnodes animFloor
-        )
-        else if $Floor != undefined then
-        (
-            delete $Floor
-            LayerManager.deleteLayerByName "floor"
-        )
-    ),
+		if state == on then
+		(
+			-- 已经由本工具创建过时直接复用，避免反复点击生成重名地面。
+			if animFloors.count > 0 then return animFloors[1]
+
+			local animFloor = undefined
+			undo "创建 GameHelper 地面" on
+			(
+				local layer = LayerManager.getLayerFromName floorLayerName
+				local floorLayerWasCreated = false
+
+				if layer == undefined then
+				(
+					layer = LayerManager.newLayerFromName floorLayerName
+					floorLayerWasCreated = true
+				)
+
+				animFloor = box length:width width:height height:depth name:"Floor"
+				animFloor.mat = standard()
+				setUserProp animFloor "CGH_GameHelperFloor" true
+				setUserProp animFloor "CGH_FloorLayerCreated" floorLayerWasCreated
+				layer.addNode animFloor
+			)
+
+			animFloor
+		)
+		else
+		(
+			-- 没有工具标记时不处理同名的用户模型。
+			if animFloors.count == 0 then return false
+
+			local shouldDeleteLayer = false
+			for animFloor in animFloors do
+			(
+				if (getUserProp animFloor "CGH_FloorLayerCreated") == true do
+					shouldDeleteLayer = true
+			)
+
+			undo "删除 GameHelper 地面" on
+			(
+				delete animFloors
+
+				-- 只删除工具自己创建的空图层；图层内还有其他物体时保留。
+				if shouldDeleteLayer then
+				(
+					local layer = LayerManager.getLayerFromName floorLayerName
+					if layer != undefined then
+					(
+						local layerNodes = #()
+						layer.nodes &layerNodes
+						if layerNodes.count == 0 do
+							LayerManager.deleteLayerByName floorLayerName
+					)
+				)
+			)
+
+			true
+		)
+	),
 
 	fn DeleteParticalView =  --删除粒子视图
 	(

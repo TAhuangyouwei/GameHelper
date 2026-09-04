@@ -68,7 +68,6 @@ rollout AniTools "动作工具"
 			SceneUtilities.scaleCheck()	--检查模型是否有缩放
 			SceneUtilities.objAxis() 		--检查模型轴向是否Y轴向上
 			SceneUtilities.getModifiers()  --检查多余的修改器
-			SceneUtilities.nameCheck()
 		)
 		
 		button btY_Up "Y轴向上" height:21 width:93 across:2
