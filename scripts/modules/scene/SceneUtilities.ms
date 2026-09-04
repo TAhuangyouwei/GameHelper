@@ -43,14 +43,28 @@ struct SceneUtilities
     ),
 
     -- 缩放检查
-	fn scaleCheck =
+	fn scaleCheck tolerance:1e-5 =
 	(
-		tempScale = for obj in objects where classof obj.baseobject == Editable_Poly and isProperty obj #scale and (abs(obj.scale.x - 1) > e^-5 or abs(obj.scale.y - 1) > e^-5 or abs(obj.scale.z - 1) > e^-5) collect obj
-		if tempScale.count != 0 then
+		local scaleTolerance = abs tolerance
+		local scaledObjects = for obj in objects where
 		(
-			cd = queryBox ("缩放有问题的模型数量有" + (tempScale.count as string) + "个，是否选中缩放有问题的模型")
-			if cd == true then selectmore tempScale
+			classof obj.baseobject == Editable_Poly and
+			isProperty obj #scale and
+			(
+				abs (obj.scale.x - 1.0) > scaleTolerance or
+				abs (obj.scale.y - 1.0) > scaleTolerance or
+				abs (obj.scale.z - 1.0) > scaleTolerance
+			)
+		) collect obj
+
+		if scaledObjects.count > 0 then
+		(
+			local shouldSelect = queryBox ("缩放有问题的模型数量有" + (scaledObjects.count as string) + "个，是否选中缩放有问题的模型")
+			if shouldSelect do selectMore scaledObjects
 		)
+
+		-- 返回检查结果，方便其他工具继续使用。
+		scaledObjects
 	),
 
 
