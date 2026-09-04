@@ -49,19 +49,62 @@ struct SceneUtilities
     ),
 
     -- 单位检查
-    fn unitCheck =
+    fn unitCheck systemScaleTolerance:1e-6 =
     (
-        if units.SystemScale != 1.0 or units.SystemType != #Centimeters then
+        local expectedSystemScale = 1.0
+        local expectedSystemType = #Centimeters
+        local expectedDisplayType = #Metric
+        local expectedMetricType = #Centimeters
+        local validSystemScaleTolerance = abs systemScaleTolerance
+
+        local systemUnitsAreValid =
+            units.SystemType == expectedSystemType and
+            abs (units.SystemScale - expectedSystemScale) <= validSystemScaleTolerance
+
+        local displayUnitsAreValid =
+            units.DisplayType == expectedDisplayType and
+            units.MetricType == expectedMetricType
+
+        if systemUnitsAreValid and displayUnitsAreValid then return true
+
+        local sceneHasObjects = objects.count > 0
+
+        -- 已有对象时直接修改系统单位可能改变场景比例，因此这里只提示。
+        if (not systemUnitsAreValid) and sceneHasObjects then
         (
-            cd = queryBox "单位错误，是否修复"
-            if cd == true then
-            (
-                units.DisplayType = #Metric
-                units.MetricType = #meters
-                units.SystemScale = 1.0
-                units.SystemType = #Centimeters
+            messageBox (
+                "系统单位不符合要求，但当前场景已经存在对象。\n\n" +
+                "要求：1 Unit = 1 Centimeter，显示单位为 Centimeters。\n\n" +
+                "为避免改变现有模型比例，本工具不会自动修改系统单位。请先确认场景比例，再通过“单位设置”或“Rescale World Units”处理。"
             )
+
+            return false
         )
+
+        local shouldFix = queryBox (
+            "当前单位设置不符合要求。\n\n" +
+            "目标：1 Unit = 1 Centimeter，显示单位为 Centimeters。\n\n" +
+            "是否自动修复？"
+        )
+
+        if shouldFix then
+        (
+            -- 只有空场景才会进入系统单位修复。
+            if not systemUnitsAreValid then
+            (
+                units.SystemType = expectedSystemType
+                units.SystemScale = expectedSystemScale
+            )
+
+            -- 显示单位只改变数值的显示方式，不改变模型实际尺寸。
+            units.DisplayType = expectedDisplayType
+            units.MetricType = expectedMetricType
+        )
+
+        units.SystemType == expectedSystemType and
+        abs (units.SystemScale - expectedSystemScale) <= validSystemScaleTolerance and
+        units.DisplayType == expectedDisplayType and
+        units.MetricType == expectedMetricType
     ),
 
     -- 缩放检查
