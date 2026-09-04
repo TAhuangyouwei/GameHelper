@@ -34,8 +34,7 @@ struct SceneUtilities
 
         if objectsWithExtraMapChannels.count > 0 then
         (
-            local shouldSelect = queryBox
-            (
+            local shouldSelect = queryBox (
                 "发现具有额外UV通道的模型，共有" +
                 (objectsWithExtraMapChannels.count as string) +
                 "个，是否选中？"
@@ -112,8 +111,7 @@ struct SceneUtilities
 
 		if objectsWithUnexpectedModifiers.count > 0 then
 		(
-			local shouldSelect = queryBox
-			(
+			local shouldSelect = queryBox (
 				"发现存在多余修改器的模型，共有" +
 				(objectsWithUnexpectedModifiers.count as string) +
 				"个。\n\n允许的情况：没有修改器，或者只有一个 Skin。\n\n是否选中这些模型？"
@@ -157,8 +155,7 @@ struct SceneUtilities
 
 		if objectsWithTransformIssues.count > 0 then
 		(
-			local shouldSelect = queryBox
-			(
+			local shouldSelect = queryBox (
 				"发现轴向或位置不符合要求的模型，共有" +
 				(objectsWithTransformIssues.count as string) +
 				"个。\n\n要求：绕 X 轴旋转 90 度，并且位置在原点附近。\n\n是否选中这些模型？"
