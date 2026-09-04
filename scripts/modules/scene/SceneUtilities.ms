@@ -128,33 +128,48 @@ struct SceneUtilities
 	),
 
     -- 检查模型轴向是否Y轴向上
-	fn objAxis =
+	fn objAxis rotationTolerance:0.01 positionTolerance:1e-4 =
 	(
-		tempAxis = #()
+		local expectedRotation = normalize (quat 90 [1, 0, 0])
+		local validRotationTolerance = abs rotationTolerance
+		local validPositionTolerance = abs positionTolerance
+		local objectsWithTransformIssues = #()
+
 		for obj in objects where classof obj.baseobject == Editable_Poly do
 		(
-			if isProperty obj #rotation and obj.rotation != (quat 0.707107 0 0 0.707107) then
-			(
-				append tempAxis obj
-			)
-			else if isProperty obj #position then
-			(
-				local posCloseToZero = (abs(obj.position.x) < 0.0001 and abs(obj.position.y) < 0.0001 and abs(obj.position.z) < 0.0001)
-				if not posCloseToZero then
-				(
-					append tempAxis obj
-				)
-			)
+			local currentRotation = normalize obj.rotation
+			local rotationDelta = normalize (currentRotation * (inverse expectedRotation))
+			local rotationDifference = abs rotationDelta.angle
+
+			-- 同一个旋转可能显示为0度或360度，统一取较小的角度差。
+			if rotationDifference > 180.0 do
+				rotationDifference = abs (360.0 - rotationDifference)
+
+			local rotationIsValid = rotationDifference <= validRotationTolerance
+			local positionIsValid =
+				abs obj.position.x <= validPositionTolerance and
+				abs obj.position.y <= validPositionTolerance and
+				abs obj.position.z <= validPositionTolerance
+
+			if not rotationIsValid or not positionIsValid do
+				append objectsWithTransformIssues obj
 		)
 
-		if tempAxis.count != 0 then
+		if objectsWithTransformIssues.count > 0 then
 		(
-			cd = queryBox ("轴向或位置有问题的模型数量有" + (tempAxis.count as string) + "个，是否选中有问题的模型")
-			if cd == true then
+			local shouldSelect = queryBox
 			(
-				selectmore tempAxis
+				"发现轴向或位置不符合要求的模型，共有" +
+				(objectsWithTransformIssues.count as string) +
+				"个。\n\n要求：绕 X 轴旋转 90 度，并且位置在原点附近。\n\n是否选中这些模型？"
 			)
+
+			if shouldSelect do
+				selectMore objectsWithTransformIssues
 		)
+
+		-- 返回检查结果，方便其他工具继续使用。
+		objectsWithTransformIssues
 	),
 	fn isGameHelperFloor node =
 	(
