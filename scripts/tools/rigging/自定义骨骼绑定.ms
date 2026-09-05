@@ -1,5 +1,5 @@
 currentFolder = getFilenamePath (getThisScriptFilename())
-HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "HYW_Scripts_Library.ms" --º¯Êý¿â
+HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "../../HYW_Scripts_Library.ms" --º¯Êý¿â
 fileIn HYW_Scripts_Library_rulesScript
 
 

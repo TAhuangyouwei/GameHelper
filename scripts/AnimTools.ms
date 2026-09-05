@@ -135,7 +135,6 @@ rollout AniTools "动作工具"
 		on btFBXtoBip pressed do
 		(
 			::CGH_ToolRegistry.loadTool #fbxToBip
-1
 		)
 		button bt_TCB_Continuity  "TCB_Continuity" width:93 tooltip:"左键对选中的帧设置 为0，右键设置为25" across:2 width:93
 
@@ -370,8 +369,8 @@ rollout AniTools "动作工具"
 		
 		on bt_wh pressed do 
 		(
-			currentFolder = @"D:\3dsmax-2021.1-maxscript-help-chm\maxscript-2021.chm"
-			ShellLaunch currentFolder ""
+			local helpPath = @"D:\3dsmax-2021.1-maxscript-help-chm\maxscript-2021.chm"
+			ShellLaunch helpPath ""
 		)
 		
 		button btnFaceRig "表情绑定辅助工具" height:21 width:205

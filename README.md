@@ -9,12 +9,17 @@ GameHelper 是一组用于 3ds Max 的 MAXScript 工具，涵盖动画、绑定�
 - 主工具面板：scripts/AnimTools.ms
 - 公共库兼容入口：scripts/HYW_Scripts_Library.ms
 - 公共功能模块：scripts/modules/ 下按职责分类的 .ms 文件
-- 独立导出工具：scripts/FBX批量导出.ms
+- 维护中工具：scripts/tools/ 下按用途分类
+- 第三方工具：scripts/vendor/，保持原始代码
+- 不透明依赖：scripts/opaque/，不直接维护或执行未知载荷
+- 项目一次性脚本：scripts/archive/project_oneoffs/
+- 独立导出工具：scripts/tools/export/FBX批量导出.ms
 
 ## 整理文档
 
 - [新手接手与修改指南](docs/BEGINNERS_GUIDE.md)
 - [脚本清单](docs/SCRIPT_CATALOG.md)
+- [当前目录结构](docs/DIRECTORY_LAYOUT.md)
 - [依赖关系](docs/DEPENDENCY_MAP.md)
 - [分阶段整理计划](docs/REORGANIZATION_PLAN.md)
 
@@ -33,5 +38,5 @@ GameHelper 是一组用于 3ds Max 的 MAXScript 工具，涵盖动画、绑定�
     examples/  示例
     output/    生成结果，不提交具体输出文件
     scenes/    场景资料
-    scripts/   当前脚本源码、modules 公共模块与历史脚本
+    scripts/   主入口、公共模块、维护中工具、第三方依赖与历史脚本
     tests/     自动化脚本和测试场景

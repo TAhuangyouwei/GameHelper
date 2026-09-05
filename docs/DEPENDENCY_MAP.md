@@ -1,71 +1,66 @@
 # 脚本依赖关系
 
-本文件只记录当前真实加载关系，不代表最终目录设计。
+本文件记录第一轮目录整理后的真实加载关系。
 
 ## 主入口
 
-    AnimTools.ms
-    └─ modules/CGH_ToolRegistry.ms
-       ├─ HYW_Scripts_Library.ms
-       ├─ 查看合并导出插件.ms
-       ├─ FBX批量导出.ms             # 已注册，尚未加入主面板按钮
-       ├─ AutoFbxtoBip v1.4.mse
-       ├─ Process_text_file_for_animation_range.ms
-       ├─ bonedivider.ms
-       ├─ 复制物体运动轨迹.ms
-       ├─ 参考大师v1.06.mse
-       ├─ AnimTools.ms               # 切换语言时重新加载自身
-       ├─ 重置蒙皮pose V1.1.mse
-       ├─ Rigging_CombineSkin.ms
-       ├─ facialRig_UI.ms
-       ├─ 自定义骨骼绑定.ms
-       ├─ add_Skin_Bones.ms
-       ├─ skinTools.ms
-       ├─ copy_paste_skin_weight.ms
-       ├─ TwistBones.ms
-       ├─ 还原bip的外观和修改器.mse
-       ├─ 选择同名物体.ms
-       └─ animcraft_float_Script_edit.ms
+    scripts/AnimTools.ms
+    └─ scripts/modules/CGH_ToolRegistry.ms
+       ├─ scripts/HYW_Scripts_Library.ms
+       ├─ scripts/tools/export/查看合并导出插件.ms
+       ├─ scripts/tools/export/FBX批量导出.ms             # 已注册，尚未加入主面板按钮
+       ├─ scripts/opaque/auto_fbx_to_bip/AutoFbxtoBip v1.4.mse
+       ├─ scripts/tools/animation/Process_text_file_for_animation_range.ms
+       ├─ scripts/tools/rigging/bonedivider.ms
+       ├─ scripts/tools/animation/复制物体运动轨迹.ms
+       ├─ scripts/opaque/reference_master/参考大师v1.06.mse
+       ├─ scripts/AnimTools.ms                             # 切换语言时重新加载自身
+       ├─ scripts/opaque/reset_skin_pose/重置蒙皮pose V1.1.mse
+       ├─ scripts/tools/skin/Rigging_CombineSkin.ms
+       ├─ scripts/tools/facial/facialRig_UI.ms
+       ├─ scripts/tools/rigging/自定义骨骼绑定.ms
+       ├─ scripts/tools/skin/add_Skin_Bones.ms
+       ├─ scripts/tools/skin/skinTools.ms
+       ├─ scripts/tools/skin/copy_paste_skin_weight.ms
+       ├─ scripts/vendor/twist_bones/TwistBones.ms
+       ├─ scripts/opaque/restore_biped/还原bip的外观和修改器.mse
+       ├─ scripts/tools/scene/选择同名物体.ms
+       └─ scripts/tools/facial/animcraft_float_Script_edit.ms
 
-所有路径现在集中在 CGH_ToolRegistry.ms。后续移动脚本时只修改注册表，不再改动每个按钮的事件处理代码。
+所有主面板子工具路径集中在 `CGH_ToolRegistry.ms`。以后移动脚本时只修改注册表，不改按钮事件中的工具编号。
 
 ## 面部绑定
 
-    facialRig_UI.ms
+    scripts/tools/facial/facialRig_UI.ms
     ├─ createFacialControl_UI_Layout.ms
     ├─ faceBones.ms
     ├─ createFacialExpressionUnit.ms
     └─ SalPoseManager.ms
 
-这五个文件应作为一个整体移动和测试，不应分散处理。
+这五个文件已经作为一个整体迁移，内部仍使用同目录相对路径加载。
 
 ## 公共库依赖
 
-    自定义骨骼绑定.ms ───────────────┐
-                                      ├─> HYW_Scripts_Library.ms
-    AnimTools.ms ─> CGH_ToolRegistry.ms ┘          │
-                                                   ├─> modules/material/MaterialUtilities.ms
-                                                   ├─> modules/rigging/BipedFunctions.ms
-                                                   ├─> modules/rigging/CustomIKHISolver.ms
-                                                   ├─> modules/rigging/BoneUtilities.ms
-                                                   ├─> modules/model/ModelUtilities.ms
-                                                   ├─> modules/model/ObjectProcessing.ms
-                                                   ├─> modules/viewport/ViewportUtilities.ms
-                                                   ├─> modules/scene/SceneUtilities.ms
-                                                   ├─> modules/scene/LayerUtilities.ms
-                                                   ├─> modules/interface/InterfaceUtilities.ms
-                                                   ├─> modules/animation/AnimationUtilities.ms
-                                                   ├─> modules/skin/BoneSkinUtilities.ms
-                                                   ├─> modules/ui/RolloutUiUtilities.ms
-                                                   └─> modules/ui/EmbeddedImageData.ms
+    scripts/tools/rigging/自定义骨骼绑定.ms ───────────────┐
+                                                          ├─> scripts/HYW_Scripts_Library.ms
+    scripts/AnimTools.ms ─> CGH_ToolRegistry.ms ──────────┘                    │
+                                                                               ├─> modules/material/MaterialUtilities.ms
+                                                                               ├─> modules/rigging/BipedFunctions.ms
+                                                                               ├─> modules/rigging/CustomIKHISolver.ms
+                                                                               ├─> modules/rigging/BoneUtilities.ms
+                                                                               ├─> modules/model/ModelUtilities.ms
+                                                                               ├─> modules/model/ObjectProcessing.ms
+                                                                               ├─> modules/viewport/ViewportUtilities.ms
+                                                                               ├─> modules/scene/SceneUtilities.ms
+                                                                               ├─> modules/scene/LayerUtilities.ms
+                                                                               ├─> modules/interface/InterfaceUtilities.ms
+                                                                               ├─> modules/animation/AnimationUtilities.ms
+                                                                               ├─> modules/skin/BoneSkinUtilities.ms
+                                                                               ├─> modules/ui/RolloutUiUtilities.ms
+                                                                               └─> modules/ui/EmbeddedImageData.ms
 
-`HYW_Scripts_Library.ms` 现在只负责加载模块。旧入口、结构名和函数调用方式仍然有效。
+`HYW_Scripts_Library.ms` 只负责加载公共模块。`自定义骨骼绑定.ms` 从 `tools/rigging/` 向上解析到这个兼容入口。
 
-查看合并导出插件.ms 顶部的公共库加载代码目前被注释，说明它可能默认由 AnimTools.ms 启动。后续需要决定它是：
+## 独立工具
 
-1. 只能从主入口打开；或
-2. 支持独立运行，并自行检查/加载公共库。
-
-## 当前没有显式入口关系的脚本
-
-FBX批量导出.ms、同步武器动画.ms、bone动画批量导出合并.ms、项目批处理脚本及部分第三方工具目前未被 AnimTools.ms 显式加载。它们应先按“独立工具、历史脚本或未来入口”分类，再决定是否加入主面板。
+`tools/export/FBX批量导出.ms`、`tools/animation/同步武器动画.ms` 和 `tools/animation/bone动画批量导出合并.ms` 暂未加入主面板。项目批处理脚本已归档，第三方工具已与自维护工具分离；后续再决定哪些独立工具加入主面板。

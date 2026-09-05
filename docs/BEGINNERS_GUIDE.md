@@ -17,14 +17,14 @@ AnimTools.ms                   主面板，类似遥控器
             |
             +-- modules/       按材质、绑定、场景等职责保存公共能力
     |
-    +-- 其他 .ms/.mse          被按钮打开的具体子工具
+    +-- tools/vendor/opaque/   被按钮打开的具体子工具和外部依赖
 ```
 
 - `AnimTools.ms` 负责显示按钮，以及决定点击按钮后做什么。
 - `CGH_ToolRegistry.ms` 只负责把工具编号对应到脚本路径。
 - `HYW_Scripts_Library.ms` 只负责依次加载公共模块，保留旧脚本的入口兼容性。
 - `scripts/modules/` 下的分类文件保存材质、骨骼、界面和动画等真正的公共功能。
-- `FBX批量导出.ms`、`查看合并导出插件.ms` 等文件仍然保存各自真正的业务逻辑。
+- `scripts/tools/export/FBX批量导出.ms`、`scripts/tools/export/查看合并导出插件.ms` 等文件仍然保存各自真正的业务逻辑。
 
 所以，这次增加注册表不会改变导出规则、合并规则、蒙皮算法或动画算法。
 
@@ -56,13 +56,13 @@ on btQuickLook pressed do
 
 这表示点击“查看导出合并文件”后，让注册表找到并运行对应脚本。
 
-### 2.2 `scripts/FBX批量导出.ms`
+### 2.2 `scripts/tools/export/FBX批量导出.ms`
 
 这是独立的批量导出界面。目前它已经登记到注册表，编号是 `#fbxBatchExporter`，但没有擅自给 `AnimTools` 增加新按钮。
 
 这个脚本会涉及打开 Max 文件和导出 FBX。以后修改它时，必须先使用测试场景副本，不要直接拿正式项目文件试验。
 
-### 2.3 `scripts/查看合并导出插件.ms`
+### 2.3 `scripts/tools/export/查看合并导出插件.ms`
 
 这是 `AnimTools` 中“查看导出合并文件”按钮打开的脚本，注册编号是 `#viewerExporter`。
 
@@ -105,7 +105,7 @@ fileIn rulesScript
 文件名和路径集中写在注册表里：
 
 ```maxscript
-#viewerExporter: "查看合并导出插件.ms"
+#viewerExporter: "tools/export/查看合并导出插件.ms"
 ```
 
 将来移动文件时，通常只需要改注册表中的一行。
@@ -206,8 +206,8 @@ fn getRelativePath toolId =
 (
     case toolId of
     (
-        #viewerExporter: "查看合并导出插件.ms"
-        #fbxBatchExporter: "FBX批量导出.ms"
+        #viewerExporter: "tools/export/查看合并导出插件.ms"
+        #fbxBatchExporter: "tools/export/FBX批量导出.ms"
         default: undefined
     )
 )
@@ -225,8 +225,8 @@ fn getRelativePath toolId =
 
 ```text
 根目录：D:\UGit\GameHelper\scripts\
-相对路径：查看合并导出插件.ms
-完整路径：D:\UGit\GameHelper\scripts\查看合并导出插件.ms
+相对路径：tools/export/查看合并导出插件.ms
+完整路径：D:\UGit\GameHelper\scripts\tools\export\查看合并导出插件.ms
 ```
 
 ### 4.5 `loadTool`
@@ -293,14 +293,14 @@ button btQuickLook "查看、合并与导出" height:21 width:200
 再到注册表查询：
 
 ```maxscript
-#viewerExporter: "查看合并导出插件.ms"
+#viewerExporter: "tools/export/查看合并导出插件.ms"
 ```
 
 然后只修改 `查看合并导出插件.ms`。这种情况下通常不需要改 `AnimTools.ms` 和注册表。
 
 ### 情况 C：脚本改名或移动目录
 
-假设把文件移到：
+当前文件已经移动到：
 
 ```text
 scripts/tools/export/查看合并导出插件.ms
@@ -358,7 +358,7 @@ AnimTools 按钮事件中的 #myCheckTool
 注册表已经有：
 
 ```maxscript
-#fbxBatchExporter: "FBX批量导出.ms"
+#fbxBatchExporter: "tools/export/FBX批量导出.ms"
 ```
 
 因此只需要在 `AnimTools.ms` 中增加按钮和事件：
@@ -545,8 +545,8 @@ docs: 补充 FBX 导出使用说明
 
 - `查看合并导出插件.ms` 仍是旧编码，中文在现代编辑器中可能显示乱码。
 - `AnimTools.ms` 的“工具书”按钮仍写有本机绝对路径 `D:\3dsmax-2021.1-maxscript-help-chm\maxscript-2021.chm`，换电脑可能失效。
-- `FBX转Bip` 按钮事件中存在一行旧代码 `1`；它来自原脚本，本轮没有顺手删除，以免把无关修改混进加载层重构。
-- 自动批处理启动曾卡在 3ds Max 初始化阶段，因此当前完成的是静态路径验证，交互式按钮冒烟测试仍待进行。
+- `FBX转Bip` 按钮事件中的孤立旧代码 `1` 已在目录整理时移除。
+- 主面板和常用按钮已完成交互式冒烟测试；移动目录后仍需复测受影响的子工具按钮。
 - `.mse` 是加密或不透明产物，不适合当作可维护源码直接修改。
 
 这些问题应该分别建立小任务、分别测试、分别提交。
