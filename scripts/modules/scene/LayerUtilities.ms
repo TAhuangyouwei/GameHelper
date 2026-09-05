@@ -85,23 +85,86 @@ struct LayerUtilities
 
 	fn DeleteEmptyLayers =  --删除空的层
 	(
-		_defaultlayer = layerManager.getLayer 0
-		_defaultlayer.current = true
+		local previousCurrentLayerName = LayerManager.current.name
+		local emptyLayerNames = #()
 
-		try
+		-- 0号图层是默认图层，因此从1开始检查。
+		if LayerManager.count > 1 then
 		(
-			_layersNum = layerManager.count - 1  --层的序号是从0开始计数的，所以减1,负号和1一定要分开，要不然报错
-			_layers = for i = 1 to _layersNum collect i  --将每个层的引用存储在"_layers"列表中
-			_revlayers = #()
-			for i in _layers.count to 1 by -1 do append _revlayers _layers[i]   --遍历了"_layers"列表中所有的层，并将每个层的顺序倒序存储在"_revlayers"列表中。
-
-			for j in _revlayers do
+			for layerIndex = 1 to (LayerManager.count - 1) do
 			(
-				_getlayer = layerManager.getlayer j
-				LayerManager.deleteLayerByName _getlayer.name
+				local layer = LayerManager.getLayer layerIndex
+				local layerNodes = #()
+
+				if layer.nodes &layerNodes then
+				(
+					if layerNodes.count == 0 do
+						append emptyLayerNames layer.name
+				)
 			)
 		)
-		catch()
+
+		if emptyLayerNames.count == 0 then
+		(
+			messageBox "当前场景没有空图层。"
+			return #()
+		)
+
+		-- 弹窗最多显示20个名称，避免图层过多时提示框太长。
+		local maxNamesToShow = 20
+		local displayedNameCount =
+			if emptyLayerNames.count < maxNamesToShow then
+				emptyLayerNames.count
+			else
+				maxNamesToShow
+		local layerNameListText = ""
+
+		for i = 1 to displayedNameCount do
+			layerNameListText += "\n- " + emptyLayerNames[i]
+
+		if emptyLayerNames.count > displayedNameCount do
+			layerNameListText += "\n- ……其余 " + ((emptyLayerNames.count - displayedNameCount) as string) + " 个"
+
+		local shouldDelete = queryBox (
+			"发现空图层 " +
+			(emptyLayerNames.count as string) +
+			" 个：" +
+			layerNameListText +
+			"\n\n是否删除？"
+		)
+
+		if not shouldDelete then return #()
+
+		local defaultLayer = LayerManager.getLayer 0
+		local deletedLayerNames = #()
+
+		-- 当前图层不能被删除，删除前暂时切换到默认图层。
+		defaultLayer.current = true
+
+		undo "删除空图层" on
+		(
+			for i = emptyLayerNames.count to 1 by -1 do
+			(
+				if LayerManager.deleteLayerByName emptyLayerNames[i] do
+					append deletedLayerNames emptyLayerNames[i]
+			)
+		)
+
+		-- 如果原来的当前图层还存在，就恢复它。
+		local previousLayer = LayerManager.getLayerFromName previousCurrentLayerName
+		if previousLayer != undefined do
+			previousLayer.current = true
+
+		messageBox (
+			"空图层清理完成。\n\n成功删除：" +
+			(deletedLayerNames.count as string) +
+			" 个\n未能删除：" +
+			((emptyLayerNames.count - deletedLayerNames.count) as string) +
+			" 个"
+		)
+
+		-- 返回实际删除成功的图层名称。
+		deletedLayerNames
 	),
 
 	fn addObjectsToLayer =
@@ -165,7 +228,6 @@ struct LayerUtilities
 		)
 
 		createSkinBonesSet()
-		DeleteEmptyLayers()
 	)
 
 
