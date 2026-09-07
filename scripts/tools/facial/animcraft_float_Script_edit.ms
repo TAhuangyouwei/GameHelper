@@ -67,6 +67,16 @@ fn isString s =
 )
 
 
+-- 统一按完整变量名匹配；拆分仅用于识别，不修改原始表达式
+fn floatScriptHasVariable scriptText varName =
+(
+    if varName == undefined do return false
+    local fullVarName = "AC_" + varName
+    local tokens = filterString scriptText "+-*/^() \t\r\n"
+    for token in tokens where token == fullVarName do return true
+    false
+)
+
 -- 函数: 检查Dummy对象是否包含特定变量
 fn doesDummyHaveVariable dummyObj varName =
 (
@@ -84,18 +94,7 @@ fn doesDummyHaveVariable dummyObj varName =
                 (
                     if classOf ctrl == Float_Script do
                     (
-						varNames = filterString ctrl.script "+-*()"  -------------------------标记
-						newVarName = "AC_" + varName
-						for i = 1 to varNames.count do 
-						(
-							if varNames[i] == newVarName do 
-							(
-								print varNames[i]
-								print newVarName
-								return true
-							)
-						)
-                        
+                        if floatScriptHasVariable ctrl.script varName do return true
                     )
                 )
             )
@@ -113,18 +112,7 @@ fn doesDummyHaveVariable dummyObj varName =
                 (
                     if classOf ctrl == Float_Script do
                     (
-						varNames = filterString ctrl.script "+-*()"  -------------------------标记
-						newVarName = "AC_" + varName
-						for i = 1 to varNames.count do 
-						(
-							if varNames[i] == newVarName do 
-							(
-								print varNames[i]
-								print newVarName
-								return true
-							)
-						)
-                        
+                        if floatScriptHasVariable ctrl.script varName do return true
                     )
                 )
             )
@@ -140,7 +128,7 @@ fn addScriptToList controller axisName varNames scriptsList objName =
 	(
 		for varName in varNames do
 		(
-			if findString controller.script varName != undefined then 
+			if floatScriptHasVariable controller.script varName then 
 			(
 			-- 如果找到对应的变量，则添加到脚本列表
 			append scriptsList (objName + "|" + axisName + "|" + controller.script)
@@ -468,16 +456,17 @@ rollout floatScriptsRollout "Float Scripts" width:1900 height:340
 		local theDummy = getNodeByName dummyName
 		if theDummy != undefined do select theDummy
 			
-		-- 从selectedScript解析modifyScript
-		-- 获取选中脚本的所有部分
+		-- 清除上一条的片段，只在脚本内容中匹配完整变量名
+		modifyScript = undefined
 		local varScripts = (filterString selectedScript "|+")
-		
-		-- 遍历脚本的每个部分，查找与选中变量相关的脚本
-		for i = 1 to varScripts.count do 
+		if (filterString selectedScript "|").count >= 3 do
 		(
-			if findString varScripts[i] selectedValue != undefined then
+			for i = 3 to varScripts.count do
 			(
-				modifyScript = varScripts[i]  -- 设置要修改的脚本
+				if floatScriptHasVariable varScripts[i] selectedValue do
+				(
+					modifyScript = varScripts[i]  -- 保留原始片段用于编辑
+				)
 			)
 		)
 	)
@@ -487,36 +476,33 @@ rollout floatScriptsRollout "Float Scripts" width:1900 height:340
 	(
 		selectedScriptIndex = index
 		selectedScript = lstFloatScripts.items[index]
+		modifyScript = undefined
+		listNum = undefined
 		
-		-- 获取选中脚本的所有部分
-		local varScripts = (filterString selectedScript "|+")
-		
-		-- 遍历脚本的每个部分，查找与选中变量相关的脚本
-		newselectedValue = "AC_" + selectedValue
-		for i = 1 to varScripts.count do 
+		if (filterString selectedScript "|").count < 3 then
 		(
-			if findString varScripts[i] newselectedValue != undefined then
+			messagebox "This is a Dummy name. Double-click a script row below it."
+		)
+		else
+		(
+			local varScripts = (filterString selectedScript "|+")
+			for i = 3 to varScripts.count do
 			(
-				subvarScripts = filterString varScripts[i] "*"
-				
-				--这里需要增加一个判断，让字符串相等
-
-				for part in subvarScripts do
+				if floatScriptHasVariable varScripts[i] selectedValue do
 				(
-					if isString part then
-					(
-						--这里需要增加一个判断，让字符串相等
-						if part == newselectedValue then  -- 使用==来判断字符串是否完全相等
-						(
-							modifyScript = varScripts[i]  -- 设置要修改的脚本
-							listNum = i  -- 记录列表中的位置
-							try (DestroyDialog editFloatScriptRollout) catch()
-							CreateDialog editFloatScriptRollout -- 打开编辑对话框
-						)
-					)
-						
+					modifyScript = varScripts[i]  -- 保留括号、符号和空白
+					listNum = i  -- 与保存时使用的原始片段索引保持一致
 				)
-				
+			)
+			
+			if listNum != undefined then
+			(
+				try (DestroyDialog editFloatScriptRollout) catch()
+				CreateDialog editFloatScriptRollout
+			)
+			else
+			(
+				messagebox "The selected variable was not found in this script. Please refresh the list."
 			)
 		)
 	)
@@ -733,7 +719,7 @@ rollout nonZeroSpinnerRollout "Non-Zero Spinners" width:200 height:265
 	(
 		if lstNonZeroValues.selected != undefined then
 		(
-			selectedValue = (FilterString lstNonZeroValues.selected ":")[1] -- 提取选中的变量名
+			selectedValue = getVarNameFromItem lstNonZeroValues.selected -- 提取选中的变量名
 			local selectedIndices = lstNonZeroValues.selection
 			if classOf selectedIndices != Array do
 				selectedIndices = #(selectedIndices)  -- 如果只选择了一个项，将其转换为数组
