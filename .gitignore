@@ -16,3 +16,8 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+tests/test_scenes/svip_00_male.fbx
+tests/test_scenes/svip_00_male@bixin.fbx
+tests/test_scenes/svip_00_male@dance.fbx
+tests/test_scenes/svip_00_male@handshake.fbx
+tests/test_scenes/svip_00_male@hug.fbx
