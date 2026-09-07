@@ -1,417 +1,697 @@
-ï»¿currentFolder = getFilenamePath (getThisScriptFilename())
-toolRegistryScript = pathConfig.appendPath currentFolder "modules/CGH_ToolRegistry.ms"
+/* ============================================================
+   GameHelper / AniTools
+   ============================================================ */
 
-if doesFileExist toolRegistryScript then
+
+/* ============================================================
+   È«¾Ö±äÁ¿
+   ============================================================ */
+
+global CGH_MainFolder
+global CGH_ToolRegistry
+global CGH_AniToolsInitOK
+
+global AniTools
+
+global RolloutUiUtilities
+global MaterialUtilities
+global ModelUtilities
+global SceneUtilities
+global ObjectProcessing
+global AnimationUtilities
+global ViewportUtilities
+global InterfaceUtilities
+global LayerUtilities
+global BoneUtilities
+global BipedFunctions
+
+global encodedString
+global decodedImage
+global imageRollout
+
+
+/* ============================================================
+   »ñÈ¡µ±Ç°½Å±¾Â·¾¶
+   ============================================================ */
+
+fn CGH_GetCurrentScriptFolder =
 (
-	fileIn toolRegistryScript
-	if ::CGH_ToolRegistry != undefined do
+	local sourceFile = undefined
+	local sourceFolder = ""
+
+	try
 	(
-		::CGH_ToolRegistry.initialize currentFolder
+		sourceFile = getThisScriptFilename()
+	)
+	catch
+	(
+		sourceFile = undefined
+	)
+
+	if sourceFile == undefined or sourceFile == "" then
+	(
+		try
+		(
+			sourceFile = getSourceFileName()
+		)
+		catch
+		(
+			sourceFile = undefined
+		)
+	)
+
+	if sourceFile != undefined and sourceFile != "" then
+	(
+		sourceFolder = getFilenamePath sourceFile
+	)
+
+	sourceFolder
+)
+
+
+/* ============================================================
+   ³õÊ¼»¯ GameHelper
+   ============================================================ */
+
+fn CGH_InitializeAniTools =
+(
+	local initSuccess = false
+	local toolRegistryPath = ""
+
+	CGH_MainFolder = CGH_GetCurrentScriptFolder()
+
+	if CGH_MainFolder == "" then
+	(
+		messageBox
+		(
+			"ÎŞ·¨»ñÈ¡ GameHelper Ö÷½Å±¾Â·¾¶¡£\n\n" +
+			"Çë²»ÒªÔÚ Listener ÖĞÖ±½ÓÕ³ÌùÔËĞĞÕû¸ö½Å±¾¡£\n\n" +
+			"Çë±£´æ AniTools.ms ºó£¬Í¨¹ı£º\n" +
+			"Run Script\n" +
+			"»ò fileIn\n" +
+			"ÔËĞĞÍêÕû½Å±¾¡£"
+		)
+
+		return false
+	)
+
+	toolRegistryPath = pathConfig.appendPath CGH_MainFolder "modules\CGH_ToolRegistry.ms"
+
+	format "\n-------------------------------------\n"
+	format "GameHelper Root: %\n" CGH_MainFolder
+	format "ToolRegistry: %\n" toolRegistryPath
+	format "-------------------------------------\n"
+
+	if not doesFileExist toolRegistryPath then
+	(
+		messageBox
+		(
+			"GameHelper registry was not found:\n\n" +
+			toolRegistryPath
+		)
+
+		return false
+	)
+
+	try
+	(
+		fileIn toolRegistryPath
+	)
+	catch
+	(
+		messageBox
+		(
+			"CGH_ToolRegistry.ms ¼ÓÔØÊ§°Ü£º\n\n" +
+			toolRegistryPath +
+			"\n\n´íÎóĞÅÏ¢£º\n" +
+			(getCurrentException())
+		)
+
+		return false
+	)
+
+	if ::CGH_ToolRegistry == undefined then
+	(
+		messageBox
+		(
+			"CGH_ToolRegistry.ms ÒÑÕÒµ½£¬\n" +
+			"µ« CGH_ToolRegistry Ã»ÓĞ³É¹¦´´½¨¡£\n\n" +
+			toolRegistryPath
+		)
+
+		return false
+	)
+
+	try
+	(
+		::CGH_ToolRegistry.initialize CGH_MainFolder
 		::CGH_ToolRegistry.loadTool #library
+
+		initSuccess = true
+	)
+	catch
+	(
+		messageBox
+		(
+			"CGH_ToolRegistry ³õÊ¼»¯Ê§°Ü¡£\n\n" +
+			"Çë¼ì²é£º\n" +
+			toolRegistryPath +
+			"\n\n´íÎóĞÅÏ¢£º\n" +
+			(getCurrentException())
+		)
+
+		initSuccess = false
+	)
+
+	initSuccess
+)
+
+
+/* ============================================================
+   ¹Ø±Õ¾É AniTools
+   ============================================================ */
+
+try
+(
+	if ::AniTools != undefined then
+	(
+		DestroyDialog ::AniTools
+		format "AniTools old dialog destroyed.\n"
+	)
+	else
+	(
+		format "AniTools old dialog not found.\n"
 	)
 )
-else
-	messageBox ("GameHelper registry was not found:" + "\n" + toolRegistryScript)
-
-
-
-try (DestroyDialog AniTools ) catch ()
-rollout AniTools "åŠ¨ä½œå·¥å…·"
+catch
 (
-		
-		
-	group "æ¨¡å‹æè´¨è§„èŒƒ"
+	format "Destroy AniTools failed: %\n" (getCurrentException())
+)
+
+
+/* ============================================================
+   ³õÊ¼»¯Ä£¿é
+   ============================================================ */
+
+CGH_AniToolsInitOK = CGH_InitializeAniTools()
+
+
+/* ============================================================
+   AniTools Ö÷½çÃæ
+   ============================================================ */
+
+rollout AniTools "¶¯×÷¹¤¾ß"
+(
+	group "Ä£ĞÍ²ÄÖÊ¹æ·¶"
 	(
-		button btResetMat "é‡ç½®æè´¨ç¼–è¾‘å™¨"  height:21 width:93 tooltip:"é‡ç½®æè´¨çƒï¼Œåˆ‡æ¢ä¸ºçº¿æ‰«ææ¸²æŸ“å™¨" across:2
-		button bnResetModelMat "é‡ç½®æ¨¡å‹"  	height:21 width:93 tooltip:"åªä½œç”¨äºEditable_Polyç‰©ä½“ï¼Œå·¦é”®è½´ç‚¹åœ¨åŸç‚¹ï¼Œå³é”®è½´ç‚¹åœ¨ç‰©ä½“ä¸­å¿ƒ"
-		on btResetMat pressed do --é‡ç½®æè´¨ç¼–è¾‘å™¨
+		button btResetMat "ÖØÖÃ²ÄÖÊ±à¼­Æ÷" height:21 width:93 tooltip:"ÖØÖÃ²ÄÖÊÇò£¬ÇĞ»»ÎªÏßÉ¨ÃèäÖÈ¾Æ÷" across:2
+		button bnResetModelMat "ÖØÖÃÄ£ĞÍ" height:21 width:93 tooltip:"Ö»×÷ÓÃÓÚEditable_PolyÎïÌå£¬×ó¼üÖáµãÔÚÔ­µã£¬ÓÒ¼üÖáµãÔÚÎïÌåÖĞĞÄ"
+
+		on btResetMat pressed do
 		(
-			MaterialUtilities.resetCompactMaterialSlots ()
+			MaterialUtilities.resetCompactMaterialSlots()
 		)
-		on bnResetModelMat pressed do  --å·¦é”®ç‚¹å‡»æ¨¡å‹è½´ç‚¹åœ¨åŸç‚¹
+
+		on bnResetModelMat pressed do
 		(
 			ModelUtilities.ResetMaterialsOfModel()
 		)
-		
-		on bnResetModelMat rightclick do 
+
+		on bnResetModelMat rightclick do
 		(
 			ModelUtilities.ResetMaterialsOfModel applyCenterPivot:true
-		)			--å³é”®è½´ç‚¹å±…ä¸­æ¨¡å‹
-		
-		button btClearMat "æ¸…é™¤æè´¨"  height:21 width:93  tooltip:"æ¸…é™¤æ‰€é€‰æ‹©çš„ç‰©ä½“çš„æè´¨" across:2 --æ¸…ç†æè´¨
-		
-		on btClearMat pressed do 
+		)
+
+		button btClearMat "Çå³ı²ÄÖÊ" height:21 width:93 tooltip:"Çå³ıËùÑ¡ÔñµÄÎïÌåµÄ²ÄÖÊ" across:2
+
+		on btClearMat pressed do
 		(
 			MaterialUtilities.clearSelectedMaterials()
 		)
-		
-		button btClearScene "æ¸…ç†åœºæ™¯"   height:21 width:93
-		
-		on btClearScene pressed do 
+
+		button btClearScene "ÇåÀí³¡¾°" height:21 width:93
+
+		on btClearScene pressed do
 		(
 			SceneUtilities.cleanScene()
 		)
-		
-		checkbutton btcreateFloor "åˆ›å»ºåœ°é¢" height:21 width:93 across:2
-		
+
+		checkbutton btcreateFloor "´´½¨µØÃæ" height:21 width:93 across:2
+
 		on btcreateFloor changed state do
-		if state == on then  SceneUtilities.createFloor state else  SceneUtilities.createFloor state
-		
-		
-		button bt_check "è§„èŒƒæ£€æŸ¥" height:21 width:93  tooltip:"æ£€æŸ¥è´´å›¾é€šé“æ•°é‡ï¼Œåœºæ™¯å•ä½ï¼Œæ¨¡å‹ç¼©æ”¾ã€è½´å‘" 
-		
-		on bt_check pressed do 
-		( 
-			clearSelection()
-			SceneUtilities.mapChannelNum() --æ£€æŸ¥æ¨¡å‹è´´å›¾é€šé“æ•°é‡
-			SceneUtilities.unitCheck()		--æ£€æŸ¥åœºæ™¯å•ä½
-			SceneUtilities.scaleCheck()	--æ£€æŸ¥æ¨¡å‹æ˜¯å¦æœ‰ç¼©æ”¾
-			SceneUtilities.objAxis() 		--æ£€æŸ¥æ¨¡å‹è½´å‘æ˜¯å¦Yè½´å‘ä¸Š
-			SceneUtilities.getModifiers()  --æ£€æŸ¥å¤šä½™çš„ä¿®æ”¹å™¨
-		)
-		
-		button btY_Up "Yè½´å‘ä¸Š" height:21 width:93 across:2
-		on btY_Up pressed do 
 		(
-			-- å¦‚æœæœ‰é€‰ä¸­çš„å¯¹è±¡ï¼Œåˆ™å¤„ç†å®ƒä»¬
+			SceneUtilities.createFloor state
+		)
+
+		button bt_check "¹æ·¶¼ì²é" height:21 width:93 tooltip:"¼ì²éÌùÍ¼Í¨µÀÊıÁ¿£¬³¡¾°µ¥Î»£¬Ä£ĞÍËõ·Å¡¢ÖáÏò"
+
+		on bt_check pressed do
+		(
+			clearSelection()
+
+			SceneUtilities.mapChannelNum()
+			SceneUtilities.unitCheck()
+			SceneUtilities.scaleCheck()
+			SceneUtilities.objAxis()
+			SceneUtilities.getModifiers()
+		)
+
+		button btY_Up "YÖáÏòÉÏ" height:21 width:93 across:2
+
+		on btY_Up pressed do
+		(
 			if selection.count != 0 do
 			(
 				ObjectProcessing.ProcessSelectedObjects()
 			)
 		)
-		button btPointPath "ç‚¹è½¨è¿¹"  height:21 width:93
-		on btPointPath pressed do 
+
+		button btPointPath "µã¹ì¼£" height:21 width:93
+
+		on btPointPath pressed do
 		(
 			ModelUtilities.pointPath()
 		)
-
 	)
-	group "æ›²çº¿ç¼–è¾‘å™¨æ—‹è½¬æ›²çº¿ä¸€é”®æš´åŠ›æ‰“å¹³" --ç¬¬ä¸€ç‰ˆéœ€æ‰‹åŠ¨ä¿®å¤
+
+
+	group "ÇúÏß±à¼­Æ÷Ğı×ªÇúÏßÒ»¼ü±©Á¦´òÆ½"
 	(
-		radiobuttons btAxis labels:#("X", "Y", "Z")  columns:3 across:2
-		edittext btValue "ç›®æ ‡å€¼:" text:"0" fieldWidth:60
-		button btConfirm "ç¡®è®¤" tooltip:"å¯èƒ½ä¼šå¼•èµ·æ—‹è½¬æ»‘åŠ¨" width:100
-		on btConfirm pressed do 
+		radiobuttons btAxis labels:#("X", "Y", "Z") columns:3 across:2
+		edittext btValue "Ä¿±êÖµ:" text:"0" fieldWidth:60
+		button btConfirm "È·ÈÏ" tooltip:"¿ÉÄÜ»áÒıÆğĞı×ª»¬¶¯" width:100
+
+		on btConfirm pressed do
 		(
 			::AnimationUtilities.flattenRotationAxisKeys (selection as array) btAxis.state btValue.text
 		)
-
 	)
-	
-	-------------------------------------------------------------------------------------------------------------------
-	
-		group "å¿«æ·å·¥å…·"
+
+
+	group "¿ì½İ¹¤¾ß"
 	(
-		button btprogram "ä»£ç è§†å›¾" height:21 width:93 across: 2
-		
-		on btprogram pressed do 
+		button btprogram "´úÂëÊÓÍ¼" height:21 width:93 across:2
+
+		on btprogram pressed do
 		(
 			ViewportUtilities.ProgrammeView()
 		)
-		button restore "åŠ¨ç”»è§†å›¾"	height:21 width:93
-		
-		on restore pressed do 
+
+		button restore "¶¯»­ÊÓÍ¼" height:21 width:93
+
+		on restore pressed do
 		(
 			ViewportUtilities.AnimView()
 		)
-		
-		button btQuickLook "æŸ¥çœ‹å¯¼å‡ºåˆå¹¶æ–‡ä»¶" height:21 width:200
-		
+
+		button btQuickLook "²é¿´µ¼³öºÏ²¢ÎÄ¼ş" height:21 width:200
+
 		on btQuickLook pressed do
 		(
 			::CGH_ToolRegistry.loadTool #viewerExporter
 		)
-		
 
-		
-		checkbutton cbt_click "å‰ªå½±" height:21 width:93 across: 2
-		
+		checkbutton cbt_click "¼ôÓ°" height:21 width:93 across:2
+
 		on cbt_click changed state do
 		(
 			InterfaceUtilities.Silhouette_Viewer()
 		)
-		button btFBXtoBip "FBXè½¬Bip" height:21 width:93 enabled:(RolloutUiUtilities.widgetState()) tooltip:"æ”¯æŒ2021åŠä»¥ä¸‹ç‰ˆæœ¬"
-		
+
+		button btFBXtoBip "FBX×ªBip" height:21 width:93 enabled:false tooltip:"Ö§³Ö2021¼°ÒÔÏÂ°æ±¾"
+
 		on btFBXtoBip pressed do
 		(
 			::CGH_ToolRegistry.loadTool #fbxToBip
 		)
-		button bt_TCB_Continuity  "TCB_Continuity" width:93 tooltip:"å·¦é”®å¯¹é€‰ä¸­çš„å¸§è®¾ç½® ä¸º0ï¼Œå³é”®è®¾ç½®ä¸º25" across:2 width:93
 
-		
-		on bt_TCB_Continuity pressed do 
+		button bt_TCB_Continuity "TCB_Continuity" width:93 tooltip:"×ó¼ü¶ÔÑ¡ÖĞµÄÖ¡ÉèÖÃÎª0£¬ÓÒ¼üÉèÖÃÎª25" across:2
+
+		on bt_TCB_Continuity pressed do
 		(
-			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj 
-			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 0  -- è®¾ç½®ä¸º0
+			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj
+
+			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 0
 		)
-		
-		on bt_TCB_Continuity rightclick do 
+
+		on bt_TCB_Continuity rightclick do
 		(
-			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj 
-			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 25  -- è®¾ç½®ä¸º25
+			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj
+
+			AnimationUtilities.setTCBContinuityForBipedObjects bipedObjs 25
 		)
-		
-		button bt_Auto_TCB "AUTO TCB"  width:93 		
-		on bt_Auto_TCB pressed do 
+
+		button bt_Auto_TCB "AUTO TCB" width:93
+
+		on bt_Auto_TCB pressed do
 		(
-			local tolerance = 0.01 -- å®šä¹‰ä¸€ä¸ªå°çš„å®¹å¿åº¦å€¼
-			
-			-- æ£€æŸ¥å½“å‰é€‰æ‹©æ˜¯å¦ä¸ºç©º
+			local tolerance = 0.01
+
 			if selection.count == 0 do
 			(
-				local bipedParts = #("Bip001 L Hand", "Bip001 R Hand", "Bip001 R Foot", "Bip001 L Foot","Bip001 Spine1","Bip001")
+				local bipedParts = #(
+					"Bip001 L Hand",
+					"Bip001 R Hand",
+					"Bip001 R Foot",
+					"Bip001 L Foot",
+					"Bip001 Spine1",
+					"Bip001"
+				)
+
 				local objectsToSelect = for partName in bipedParts where (getNodeByName partName) != undefined collect (getNodeByName partName)
+
 				select objectsToSelect
 			)
 
-			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj 
-			
-			for bipedObj in bipedObjs do 
+			local bipedObjs = for obj in selection where classof obj == Biped_Object collect obj
+
+			for bipedObj in bipedObjs do
 			(
 				AnimationUtilities.processSingleBipedObject bipedObj tolerance
 			)
 		)
-		
 
-		button bt_animRange "å¸§æ•°è¡¨è½¬æ¢" width:200  tooltips:"unityå’Œmaxæ ¼å¼è½¬æ¢"
+		button bt_animRange "Ö¡Êı±í×ª»»" width:200 tooltip:"unityºÍmax¸ñÊ½×ª»»"
+
 		on bt_animRange pressed do
 		(
 			::CGH_ToolRegistry.loadTool #animRange
 		)
-		
-		
-		
 
-		
-		
-		
-		Dropdownlist BoneColorList "éª¨éª¼é¢œè‰²åˆ—è¡¨" items:#("red-çœ¼ç›","green-è£™å­","blue-å¤´å‘","white-å…¶å®ƒ","black-æœ«ç«¯éª¨","orange-æ­¦å™¨","yellow-æŠ«é£","brown-è¢–å­","gray-èƒ¸") selection:1 height:10 toolTip:"éª¨éª¼å¯é€‰é¢œè‰²åˆ—è¡¨"
-		
-		button BoneWireColor "ç¡®è®¤" width:90
-		
-		on BoneWireColor pressed do 
+		dropdownlist BoneColorList "¹Ç÷ÀÑÕÉ«ÁĞ±í" items:#(
+			"red-ÑÛ¾¦",
+			"green-È¹×Ó",
+			"blue-Í··¢",
+			"white-ÆäËü",
+			"black-Ä©¶Ë¹Ç",
+			"orange-ÎäÆ÷",
+			"yellow-Åû·ç",
+			"brown-Ğä×Ó",
+			"gray-ĞØ"
+		) selection:1 height:10 tooltip:"¹Ç÷À¿ÉÑ¡ÑÕÉ«ÁĞ±í"
+
+		button BoneWireColor "È·ÈÏ" width:90
+
+		on BoneWireColor pressed do
 		(
-			case of 
+			if selection.count > 0 then
 			(
-				(BoneColorList.selection == 1): $.wirecolor = red
-				
-				(BoneColorList.selection == 2): $.wirecolor = green
-				
-				(BoneColorList.selection == 3): $.wirecolor = blue
-				
-				(BoneColorList.selection == 4): $.wirecolor = white
-				
-				(BoneColorList.selection == 5): $.wirecolor = black
-				
-				(BoneColorList.selection == 6): $.wirecolor = orange
-				
-				(BoneColorList.selection == 7): $.wirecolor = yellow
-				
-				(BoneColorList.selection == 8): $.wirecolor = brown
-				
-				(BoneColorList.selection == 9): $.wirecolor = gray		
-			)		
+				case BoneColorList.selection of
+				(
+					1: $.wirecolor = red
+					2: $.wirecolor = green
+					3: $.wirecolor = blue
+					4: $.wirecolor = white
+					5: $.wirecolor = black
+					6: $.wirecolor = orange
+					7: $.wirecolor = yellow
+					8: $.wirecolor = brown
+					9: $.wirecolor = gray
+				)
+			)
 		)
-		
-		button btBoneDivider "éª¨éª¼åˆ‡åˆ†å·¥å…·"  height:21 width:93 across:2
-		
+
+		button btBoneDivider "¹Ç÷ÀÇĞ·Ö¹¤¾ß" height:21 width:93 across:2
+
 		on btBoneDivider pressed do
 		(
 			::CGH_ToolRegistry.loadTool #boneDivider
 		)
 
-		button btCopyTrans "è½¨è¿¹æ‹·è´" height:21 width:93  
-		
+		button btCopyTrans "¹ì¼£¿½±´" height:21 width:93
+
 		on btCopyTrans pressed do
 		(
 			::CGH_ToolRegistry.loadTool #copyTrack
 		)
-		
-		
-		button btRecoder "å‚è€ƒå¤§å¸ˆ"  height:21 width:93 across:2
-		
+
+		button btRecoder "²Î¿¼´óÊ¦" height:21 width:93 across:2
+
 		on btRecoder pressed do
 		(
 			::CGH_ToolRegistry.loadTool #referenceMaster
 		)
-		
-		button btRepair "ä¹±ç ä¿®å¤Repair"  height:21 width:93 tooltip:"ä¿®å¤ç•Œé¢ä¹±ç é—®é¢˜"
-		
+
+		button btRepair "ÂÒÂëĞŞ¸´Repair" height:21 width:93 tooltip:"ĞŞ¸´½çÃæÂÒÂëÎÊÌâ"
+
 		on btRepair pressed do
 		(
 			InterfaceUtilities.SetDefaultLanguageToChinese()
 			::CGH_ToolRegistry.loadTool #animTools
-
 		)
-		
-		
-
 	)
-	group "ç»‘å®šå·¥å…·"
+
+
+	group "°ó¶¨¹¤¾ß"
 	(
-		button btObjLayer "è°ƒæ•´å±‚çº§" height:21 width:93 across: 2  tooltip:"æŠŠä¸åŒå±æ€§çš„ç‰©ä½“æ”¾å…¥ä¸åŒçš„å±‚çº§,å·¦é”®æ™®é€šåˆ†å±‚ï¼Œå³é”®è¡¨æƒ…ç»‘å®šåˆ†å±‚"   across:2
-		
-		on btObjlayer pressed do 
+		button btObjLayer "µ÷Õû²ã¼¶" height:21 width:93 across:2 tooltip:"°Ñ²»Í¬ÊôĞÔµÄÎïÌå·ÅÈë²»Í¬µÄ²ã¼¶,×ó¼üÆÕÍ¨·Ö²ã£¬ÓÒ¼ü±íÇé°ó¶¨·Ö²ã"
+
+		on btObjLayer pressed do
 		(
 			LayerUtilities.AddObjectsToLayer()
 		)
-		
-		button bt_clearNullLayer "æ¸…ç†ç©ºå±‚"  height:21 width:93
-		on bt_clearNullLayer pressed do 
+
+		button bt_clearNullLayer "ÇåÀí¿Õ²ã" height:21 width:93
+
+		on bt_clearNullLayer pressed do
 		(
 			LayerUtilities.DeleteEmptyLayers()
 		)
-		
-		button bt_resetSkinPose "æ¢å¤è’™çš®pose" height:21 width:93 across: 2  tooltip:"æ¢å¤åˆ°Tpose"
-		
+
+		button bt_resetSkinPose "»Ö¸´ÃÉÆ¤pose" height:21 width:93 across:2 tooltip:"»Ö¸´µ½Tpose"
+
 		on bt_resetSkinPose pressed do
 		(
 			::CGH_ToolRegistry.loadTool #resetSkinPose
 		)
-		button bt_CombineSkin "è’™çš®æ‹†åˆ†åˆå¹¶"  height:21 width:93   tooltip:"åˆå¹¶æ—¶æ¯æ¬¡é€‰æ‹©ä¸¤ä¸ªç‰©ä½“"
-		
+
+		button bt_CombineSkin "ÃÉÆ¤²ğ·ÖºÏ²¢" height:21 width:93 tooltip:"ºÏ²¢Ê±Ã¿´ÎÑ¡ÔñÁ½¸öÎïÌå"
+
 		on bt_CombineSkin pressed do
 		(
 			::CGH_ToolRegistry.loadTool #combineSkin
 		)
-		
-		button bt_facialRig  "è¡¨æƒ…ç»‘å®š"  height:21 width:93  across:2  tooltip:"è¡¨æƒ…ç»‘å®šå·¥å…·"
-		
+
+		button bt_facialRig "±íÇé°ó¶¨" height:21 width:93 across:2 tooltip:"±íÇé°ó¶¨¹¤¾ß"
+
 		on bt_facialRig pressed do
 		(
 			::CGH_ToolRegistry.loadTool #facialRig
 		)
-		
-		button bt_bodylRig  "èº«ä½“ç»‘å®š"  height:21 width:93    tooltip:"èº«ä½“ç»‘å®šå·¥å…·"
-		
+
+		button bt_bodylRig "ÉíÌå°ó¶¨" height:21 width:93 tooltip:"ÉíÌå°ó¶¨¹¤¾ß"
+
 		on bt_bodylRig pressed do
 		(
 			::CGH_ToolRegistry.loadTool #bodyRig
 		)
-		
-		button reNameNub "å‘½åæœ«ç«¯" height:21 width:93 tooltip:"boneéª¨éª¼æœ«ç«¯éª¨é‡å‘½å"  across: 2
-		on reNameNub pressed do 
+
+		button reNameNub "ÃüÃûÄ©¶Ë" height:21 width:93 tooltip:"bone¹Ç÷ÀÄ©¶Ë¹ÇÖØÃüÃû" across:2
+
+		on reNameNub pressed do
 		(
 			BoneUtilities.RenameBoneNub()
 		)
-		
-		button btAddSkinBones "æ‹·è´éª¨éª¼åˆ—è¡¨" width:93
+
+		button btAddSkinBones "¿½±´¹Ç÷ÀÁĞ±í" width:93
+
 		on btAddSkinBones pressed do
 		(
 			::CGH_ToolRegistry.loadTool #addSkinBones
 		)
-		
-		button btSkinTools "è’™çš®å·¥å…·" width:93  across: 2
-		
+
+		button btSkinTools "ÃÉÆ¤¹¤¾ß" width:93 across:2
+
 		on btSkinTools pressed do
 		(
 			::CGH_ToolRegistry.loadTool #skinTools
 		)
 
-		
-		button btn_weightCopy "æƒé‡ç¼åˆ" width:93
+		button btn_weightCopy "È¨ÖØ·ìºÏ" width:93
+
 		on btn_weightCopy pressed do
 		(
 			::CGH_ToolRegistry.loadTool #copySkinWeights
 		)
 	)
-	
+
+
 	group "biped"
 	(
-		button btQuater "å››å…ƒæ•°" height:21 width:93 across:2 tooltip:"åˆ‡æ¢åˆ°Quateræ›²çº¿æ¨¡å¼"
-		button btBipScale "Bipç¼©æ”¾"  height:21 width:93 tooltip:"åªä½œç”¨äºé€‰ä¸­çš„bipéª¨éª¼,å·¦é”®å¼€å¯ï¼Œå³é”®å…³é—­"
-		button btBoneScale "éª¨éª¼åŒ¹é…"  height:21 width:93  across:2
-		button btTwistCreate "æ‰­æ›²éª¨éª¼" height:21 width:93 tooltip:"åˆ›å»ºæ‰­æ›²éª¨éª¼" 
-		
-		on btQuater pressed do 
+		button btQuater "ËÄÔªÊı" height:21 width:93 across:2 tooltip:"ÇĞ»»µ½QuaterÇúÏßÄ£Ê½"
+		button btBipScale "BipËõ·Å" height:21 width:93 tooltip:"Ö»×÷ÓÃÓÚÑ¡ÖĞµÄbip¹Ç÷À,×ó¼ü¿ªÆô£¬ÓÒ¼ü¹Ø±Õ"
+
+		button btBoneScale "¹Ç÷ÀÆ¥Åä" height:21 width:93 across:2
+		button btTwistCreate "Å¤Çú¹Ç÷À" height:21 width:93 tooltip:"´´½¨Å¤Çú¹Ç÷À"
+
+		on btQuater pressed do
 		(
 			BipedFunctions.BipedEulerQuarter()
 		)
-		on btBipScale pressed do BipedFunctions.BipedScaleOn() --å·¦é”®å¼€å¯ç¼©æ”¾
-		
-		on btBipScale rightClick do BipedFunctions.BipedScaleOff()  --å³é”®å…³é—­ç¼©æ”¾
-		
-		on btBoneScale pressed do 
+
+		on btBipScale pressed do
+		(
+			BipedFunctions.BipedScaleOn()
+		)
+
+		on btBipScale rightclick do
+		(
+			BipedFunctions.BipedScaleOff()
+		)
+
+		on btBoneScale pressed do
 		(
 			BipedFunctions.boneScale()
 		)
-		on btTwistCreate  pressed do
+
+		on btTwistCreate pressed do
 		(
 			::CGH_ToolRegistry.loadTool #twistBones
 		)
-		button btCheakName "é‡åæ£€æŸ¥" height:21 width:93 tooltip:"æ£€æŸ¥åœºæ™¯ä¸­çš„é‡åç‰©ä½“"  across:2
-		
-		button btRestoreBiped "è¿˜åŸå¤–è§‚"  height:21 width:93
+
+		button btCheakName "ÖØÃû¼ì²é" height:21 width:93 tooltip:"¼ì²é³¡¾°ÖĞµÄÖØÃûÎïÌå" across:2
+		button btRestoreBiped "»¹Ô­Íâ¹Û" height:21 width:93
+
 		on btRestoreBiped pressed do
 		(
 			::CGH_ToolRegistry.loadTool #restoreBiped
 		)
-		
+
 		on btCheakName pressed do
 		(
 			::CGH_ToolRegistry.loadTool #selectSameName
 
-			errorObj  = for obj in objects where (classof obj == BoneGeometry and obj.scale.x <0 ) collect obj 
-				
-			if errorObj.count != 0 then 
+			local errorObj = for obj in objects where (classof obj == BoneGeometry and obj.scale.x < 0) collect obj
+
+			if errorObj.count != 0 then
 			(
-				messageBox "å‘ç°éª¨éª¼é”™è¯¯çš„ç‰©ä½“"
-				selectmore errorObj
+				messageBox "·¢ÏÖ¹Ç÷À´íÎóµÄÎïÌå"
+				selectMore errorObj
 			)
-
-			
-		)
-	) 
-	
-	group "å¿«æ·å·¥å…·"
-	(
-		button bt_wh "å·¥å…·ä¹¦" height:21 width:205  tooltip:"é€‚ç”¨äºmax2008ä¹‹å‰çš„ç‰ˆæœ¬"  --across: 2
-		
-		on bt_wh pressed do 
-		(
-			local helpPath = @"D:\3dsmax-2021.1-maxscript-help-chm\maxscript-2021.chm"
-			ShellLaunch helpPath ""
-		)
-		
-		button btnFaceRig "è¡¨æƒ…ç»‘å®šè¾…åŠ©å·¥å…·" height:21 width:205
-		on btnFaceRig pressed do
-		(
-			::CGH_ToolRegistry.loadTool #animcraftFloat
-		)
-			
-		
-		
-		
-		button btnShowImage  "Author:HYW ï¼Œè”ç³»ä½œè€…ï¼Œåé¦ˆæŠ¥é”™ï¼  " height:21 width:205
-
-		on btnShowImage pressed do
-		(
-			-- ä½¿ç”¨DotNetç±»å°†Base64å­—ç¬¦ä¸²è§£ç ä¸ºå­—èŠ‚æ•°ç»„
-			byteArray = (dotnetclass "System.Convert").FromBase64String(encodedString)
-
-			-- åˆ›å»ºä¸€ä¸ªæ–°çš„å†…å­˜æµ
-			memoryStream = dotNetObject "System.IO.MemoryStream" byteArray
-
-			-- ä½¿ç”¨å†…å­˜æµåˆ›å»ºBitmapå›¾ç‰‡
-			global decodedImage
-			decodedImage = (dotnetobject "System.Drawing.Bitmap" memoryStream)
-
-			try(DestroyDialog ::imageRollout) catch()
-
-			rollout imageRollout "Image Viewer" width:600 height:600
-			(
-				dotNetControl picture "System.Windows.Forms.PictureBox" pos:[0,0] width:600 height:600
-
-				on imageRollout open do
-				(
-					picture.SizeMode = (dotNetClass "System.Windows.Forms.PictureBoxSizeMode").StretchImage
-					picture.Image = decodedImage
-				)
-			)
-			createDialog imageRollout
 		)
 	)
 
 
+	group "¿ì½İ¹¤¾ß"
+	(
+		button bt_wh "¹¤¾ßÊé" height:21 width:205 tooltip:"ÊÊÓÃÓÚmax2008Ö®Ç°µÄ°æ±¾"
+
+		on bt_wh pressed do
+		(
+			local helpPath = @"D:\3dsmax-2021.1-maxscript-help-chm\maxscript-2021.chm"
+
+			if doesFileExist helpPath then
+			(
+				ShellLaunch helpPath ""
+			)
+			else
+			(
+				messageBox
+				(
+					"Ã»ÓĞÕÒµ½ MAXScript °ïÖúÎÄ¼ş£º\n\n" +
+					helpPath
+				)
+			)
+		)
+
+		button btnFaceRig "±íÇé°ó¶¨¸¨Öú¹¤¾ß" height:21 width:205
+
+		on btnFaceRig pressed do
+		(
+			::CGH_ToolRegistry.loadTool #animcraftFloat
+		)
+
+		button btnShowImage "Author:HYW £¬ÁªÏµ×÷Õß£¬·´À¡±¨´í£¡" height:21 width:205
+
+		on btnShowImage pressed do
+		(
+			try
+			(
+				local byteArray = (dotNetClass "System.Convert").FromBase64String encodedString
+				local memoryStream = dotNetObject "System.IO.MemoryStream" byteArray
+
+				decodedImage = dotNetObject "System.Drawing.Bitmap" memoryStream
+
+				try
+				(
+					if ::imageRollout != undefined then
+					(
+						DestroyDialog ::imageRollout
+					)
+				)
+				catch
+				(
+				)
+
+				rollout imageRollout "Image Viewer" width:600 height:600
+				(
+					dotNetControl picture "System.Windows.Forms.PictureBox" pos:[0,0] width:600 height:600
+
+					on imageRollout open do
+					(
+						picture.SizeMode = (dotNetClass "System.Windows.Forms.PictureBoxSizeMode").StretchImage
+						picture.Image = decodedImage
+					)
+				)
+
+				CreateDialog imageRollout
+			)
+			catch
+			(
+				messageBox
+				(
+					"×÷ÕßÍ¼Æ¬¼ÓÔØÊ§°Ü¡£\n\n" +
+					(getCurrentException())
+				)
+			)
+		)
+	)
+
+
+	on AniTools open do
+	(
+		try
+		(
+			if ::RolloutUiUtilities != undefined then
+			(
+				btFBXtoBip.enabled = ::RolloutUiUtilities.widgetState()
+			)
+			else
+			(
+				btFBXtoBip.enabled = false
+				format "Warning: RolloutUiUtilities Î´¼ÓÔØ£¬FBX×ªBip°´Å¥ÒÑ½ûÓÃ¡£\n"
+			)
+		)
+		catch
+		(
+			btFBXtoBip.enabled = false
+			format "Warning: »ñÈ¡ FBX×ªBip °´Å¥×´Ì¬Ê§°Ü£º%\n" (getCurrentException())
+		)
+	)
 )
-CreateDialog AniTools  width:240
+
+
+/* ============================================================
+   ´´½¨ AniTools
+   ============================================================ */
+
+if CGH_AniToolsInitOK then
+(
+	try
+	(
+		CreateDialog ::AniTools width:240
+		format "AniTools dialog created.\n"
+	)
+	catch
+	(
+		messageBox
+		(
+			"AniTools ´´½¨Ê§°Ü¡£\n\n" +
+			(getCurrentException())
+		)
+	)
+)
+else
+(
+	format "AniTools initialization failed, dialog was not created.\n"
+)
