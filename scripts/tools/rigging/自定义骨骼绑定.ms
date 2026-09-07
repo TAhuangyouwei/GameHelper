@@ -1,14 +1,14 @@
-currentFolder = getFilenamePath (getThisScriptFilename())
-HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "../../HYW_Scripts_Library.ms" --º¯Êı¿â
+ï»¿currentFolder = getFilenamePath (getThisScriptFilename())
+HYW_Scripts_Library_rulesScript = pathConfig.appendPath currentFolder "../../HYW_Scripts_Library.ms" --å‡½æ•°åº“
 fileIn HYW_Scripts_Library_rulesScript
 
 
 
 try(DestroyDialog boneFin )catch() 
-rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
+rollout boneFin "è‡ªå®šä¹‰éª¨éª¼ç»‘å®š"
 (
 	
-	button createConerBone "ÊÖÖâÏ¥¸Ç´´½¨" height:21 width:130   tooltip:"ÒÀ´ÎÑ¡Ôñ¸¸¼¶ºÍ×Ó¼¶" across:2  
+	button createConerBone "æ‰‹è‚˜è†ç›–åˆ›å»º" height:21 width:130   tooltip:"ä¾æ¬¡é€‰æ‹©çˆ¶çº§å’Œå­çº§" across:2  
 	
 	on createConerBone pressed do 
 	(
@@ -29,7 +29,7 @@ rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
 		
 	)
 	
-	button btmuscle "¼¡Èâ´´½¨(Ëõ·Å)"   height:21 width:130    tooltip:"ÒÀ´ÎÑ¡Ôñ3¸öÎïÌå upper lower muscle(¼ç°ò¡¢Í·¡¢¼¡Èâ)" 
+	button btmuscle "è‚Œè‚‰åˆ›å»º(ç¼©æ”¾)"   height:21 width:130    tooltip:"ä¾æ¬¡é€‰æ‹©3ä¸ªç‰©ä½“ upper lower muscle(è‚©è†€ã€å¤´ã€è‚Œè‚‰)" 
 	
 	on btmuscle pressed do 
 	(
@@ -46,12 +46,12 @@ rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
 		print "ABCD"
 	)
 	
-	button btLegCtrl "ÂíÍÈ²¿¿ØÖÆÆ÷" tooltip:"Ë³ĞòÑ¡Ôñupper£¬lower£¬Thigh(Biped)Ñ¡ÍêÒ»×éÔÙÑ¡ÁíÒ»×é" across:2   height:21 width:130 
+	button btLegCtrl "é©¬è…¿éƒ¨æ§åˆ¶å™¨" tooltip:"é¡ºåºé€‰æ‹©upperï¼Œlowerï¼ŒThigh(Biped)é€‰å®Œä¸€ç»„å†é€‰å¦ä¸€ç»„" across:2   height:21 width:130 
 	on btLegCtrl pressed do 
 	(
 		num = selection.count
 		temp = num/3
-		if num !=0 then --Ë³ĞòÑ¡Ôñ£¬Ñ¡ÍêÒ»×éÔÙÑ¡ÁíÒ»×é
+		if num !=0 then --é¡ºåºé€‰æ‹©ï¼Œé€‰å®Œä¸€ç»„å†é€‰å¦ä¸€ç»„
 		(
 			for i = 1 to num by 3 do 
 				(
@@ -62,29 +62,29 @@ rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
 		)
 	)
 	
-	button btSpineCtrl "´´½¨¼¹×µ¿ØÖÆÆ÷"  tooltip:"´´½¨³öÀ´¼¹×µ¹Ç÷ÀµÄ¿ØÖÆÆ÷ÏµÍ³"      height:21 width:130 
+	button btSpineCtrl "åˆ›å»ºè„Šæ¤æ§åˆ¶å™¨"  tooltip:"åˆ›å»ºå‡ºæ¥è„Šæ¤éª¨éª¼çš„æ§åˆ¶å™¨ç³»ç»Ÿ"      height:21 width:130 
 	
 	on btSpineCtrl pressed do 
 	(
 		undo on 
 		(
 			bnArray = selection as array 
-			for obj in bnArray do BipedFunctions.createSpineControlSystem obj  --´´½¨³öÀ´¼¹×µ¹Ç÷ÀµÄ¿ØÖÆÆ÷ÏµÍ³
+			for obj in bnArray do BipedFunctions.createSpineControlSystem obj  --åˆ›å»ºå‡ºæ¥è„Šæ¤éª¨éª¼çš„æ§åˆ¶å™¨ç³»ç»Ÿ
 		)
 		
 	)
 	
-	button btCustomIKHISolver "Ö©ÖëÍÈ´´½¨" tooltip:"Ë«»÷È«Ñ¡µ¥¸öÍÈµÄËùÓĞ¹Ç÷À(ËãÉÏÄ©¶Ë¹Ç3¸ù»ò5¸ù)" across:2    height:21 width:130 
+	button btCustomIKHISolver "èœ˜è››è…¿åˆ›å»º" tooltip:"åŒå‡»å…¨é€‰å•ä¸ªè…¿çš„æ‰€æœ‰éª¨éª¼(ç®—ä¸Šæœ«ç«¯éª¨3æ ¹æˆ–5æ ¹)" across:2    height:21 width:130 
 	
 	on btCustomIKHISolver pressed do 
 	(
 		myCustomIKSolver = CustomIKHISolver()
 		myCustomIKSolver.create()
 	)
-	button btn_Measure "²âÁ¿ÎïÌå³¤¶È"    height:21 width:130 
+	button btn_Measure "æµ‹é‡ç‰©ä½“é•¿åº¦"    height:21 width:130 
 	
 	
-	button btn_Joint "¹Ø½Ú´´½¨"   tooltip:"ĞèÒªÒÀ´ÎÑ¡ÔñÈı¸öÎïÌå" across:2        height:21 width:130 
+	button btn_Joint "å…³èŠ‚åˆ›å»º"   tooltip:"éœ€è¦ä¾æ¬¡é€‰æ‹©ä¸‰ä¸ªç‰©ä½“" across:2        height:21 width:130 
 	
 	on btn_Joint pressed do 
 	(
@@ -97,7 +97,7 @@ rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
 	
 	
 	
-	button btn_Muscle "¼¡Èâ´´½¨(Î»ÒÆ)"   tooltip:"Bone¹Ç÷ÀĞèÒªXÖáÏòÇ°£¬YÖáÏòÉÏ"           height:21 width:130 
+	button btn_Muscle "è‚Œè‚‰åˆ›å»º(ä½ç§»)"   tooltip:"Boneéª¨éª¼éœ€è¦Xè½´å‘å‰ï¼ŒYè½´å‘ä¸Š"           height:21 width:130 
 	
 	on btn_Muscle pressed do 
 	(
@@ -109,7 +109,7 @@ rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
 	)
 	
 	
-	label lbl_Measure "¹Ç÷ÀµÄ²âÁ¿³¤¶ÈÎª:"       
+	label lbl_Measure "éª¨éª¼çš„æµ‹é‡é•¿åº¦ä¸º:"       
 	
 	on btn_Measure pressed do 
 	(
@@ -132,7 +132,7 @@ rollout boneFin "×Ô¶¨Òå¹Ç÷À°ó¶¨"
 			)
 		)
 		
-		lbl_Measure.text = "¹Ç÷ÀµÄ²âÁ¿³¤¶ÈÎª:" + obj_length as string 
+		lbl_Measure.text = "éª¨éª¼çš„æµ‹é‡é•¿åº¦ä¸º:" + obj_length as string 
 	)
 		
 )
