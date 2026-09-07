@@ -1,252 +1,1106 @@
 /*
+    AnimCraft Float Script Manager V4.5
+    Author: 黄友为
 
+    V4.5
+    ------------------------------------------------------------
+    1. 保留 V4 Group UI
 
-这段代码是一个针对 Autodesk 3ds Max 的MaxScript脚本，主要功能包括获取特定对象的非零自定义属性值、检查Dummy对象是否包含特定变量，并在用户界面上展示相关信息。代码中使用了一系列的全局变量、函数和Rollout界面元素，以及对这些元素的事件处理，以实现其功能。
+    2. XYZ Checkbox：
+       Float Script + 已包含当前变量
+           -> 灰色不可选
 
-- **全局变量**：用于整个脚本中存储和传递信息。
-- **函数**：执行特定任务，如检查对象属性、提取信息等。
-- **Rollout定义**：用于创建用户界面，使用户能够与脚本交互。
+       Float Script + 未包含当前变量
+           -> 可以选择
 
-代码中的注释提供了对每个部分功能和工作原理的说明，帮助理解脚本的整体结构和逻辑。
+       非 Float Script
+           -> 可以选择
+           -> 添加时自动创建 Float Script
 
+    3. Scale 使用 ScaleXYZ
 
+    4. Scale 转 Float Script 时：
+       不再读取旧 Scale Controller.value
+       强制初始 Expression = 1.0
 
+       Position = 0.0 基准
+       Rotation = 0.0 基准
+       Scale    = 1.0 基准
+
+    5. 添加成功后自动选择新添加的 Track
+
+    6. 多条添加时：
+       自动选择第一条成功添加的 Track
+       X -> Y -> Z
+
+    7. 保留 Biped / HeadNub 安全处理
 */
 
 
--- 尝试销毁已经存在的对话框，以避免重复创建
-try(destroyDialog ::nonZeroSpinnerRollout) catch()
-try(destroyDialog ::floatScriptsRollout) catch()
+------------------------------------------------------------
+-- 清理
+------------------------------------------------------------
 
--- 函数: 获取非零的自定义属性值
+try (callbacks.removeScripts id:#AnimCraftFloatAxisState) catch()
+
+try (destroyDialog ::nonZeroSpinnerRollout) catch()
+try (destroyDialog ::floatScriptsRollout) catch()
+try (destroyDialog ::editFloatScriptRollout) catch()
+
+
+------------------------------------------------------------
+-- 全局变量
+------------------------------------------------------------
+
+global selectedValue = undefined
+global selectedScript = undefined
+global modifyScript = undefined
+global updatedScript = ""
+global dummyController = undefined
+global currentFloatScriptVarNames = #()
+
+
+------------------------------------------------------------
+-- 安全获取 Position Controller
+------------------------------------------------------------
+
+fn safeGetPositionController obj =
+(
+    local ctrl = undefined
+
+    if isValidNode obj do
+    (
+        try
+        (
+            if isProperty obj #position do
+            (
+                ctrl = obj.position.controller
+            )
+        )
+        catch()
+    )
+
+    ctrl
+)
+
+
+------------------------------------------------------------
+-- 安全获取 Rotation Controller
+------------------------------------------------------------
+
+fn safeGetRotationController obj =
+(
+    local ctrl = undefined
+
+    if isValidNode obj do
+    (
+        try
+        (
+            if isProperty obj #rotation do
+            (
+                ctrl = obj.rotation.controller
+            )
+        )
+        catch()
+    )
+
+    ctrl
+)
+
+
+------------------------------------------------------------
+-- 安全获取 Scale Controller
+------------------------------------------------------------
+
+fn safeGetScaleController obj =
+(
+    local ctrl = undefined
+
+    if isValidNode obj do
+    (
+        try
+        (
+            if isProperty obj #scale do
+            (
+                ctrl = obj.scale.controller
+            )
+        )
+        catch()
+    )
+
+    ctrl
+)
+
+
+------------------------------------------------------------
+-- 获取非零 Custom Attribute
+------------------------------------------------------------
+
 fn getNonZeroSpinnerValues obj =
 (
-    if not isValidNode obj do return #() -- 检查obj是否为有效的节点
-    local nonZeroValues = #() -- 存储非零值的数组
-    local custAttributesList = custAttributes.getDefs obj -- 获取对象的自定义属性定义
+    if not isValidNode obj do return #()
 
-    -- 遍历自定义属性定义
-    if custAttributesList != undefined then
-    (
-        for custAttrDef in custAttributesList do
-        (
-            local custAttrData = custAttributes.get obj custAttrDef -- 获取自定义属性数据
-            if custAttrData != undefined do
-            (
-                local propNames = getPropNames custAttrData -- 获取属性名称
-                -- 遍历所有属性
-                for propName in propNames do
-                (
-                    local propValue = getProperty custAttrData propName -- 获取属性值
-                    try
-                    (
-                        -- 如果属性是浮点数且非零，则添加到数组中
-                        if classOf propValue == Float and abs(propValue) > 0.01 do
-                        (
-                            local formattedValue = (floor(propValue * 100 + 0.5)) / 100.0 -- 格式化值
-                            append nonZeroValues ((propName as string) + ": " + (formattedValue as string))
-                        )
-                    ) catch()
-                )
-            )
-        )
-    )
-    nonZeroValues -- 返回非零值数组
-)
-
-
-
-fn isString s =
-(
-	if findString s "AC_" != undefined then 
-		return true 
-	else
-		return false
-
-
-)
-
-
--- 统一按完整变量名匹配；拆分仅用于识别，不修改原始表达式
-fn floatScriptHasVariable scriptText varName =
-(
-    if varName == undefined do return false
-    local fullVarName = "AC_" + varName
-    local tokens = filterString scriptText "+-*/^() \t\r\n"
-    for token in tokens where token == fullVarName do return true
-    false
-)
-
--- 函数: 检查Dummy对象是否包含特定变量
-fn doesDummyHaveVariable dummyObj varName =
-(
-    if classOf dummyObj == Dummy do
-    (
-        -- 检查位置控制器的各个轴
-        if isProperty dummyObj #position do
-        (
-            local posController = dummyObj.position.controller
-            if classOf posController == Position_XYZ do
-            (
-                local posControllers = #(posController.x_position.controller, posController.y_position.controller, posController.z_position.controller)
-                -- 遍历位置控制器
-                for ctrl in posControllers do
-                (
-                    if classOf ctrl == Float_Script do
-                    (
-                        if floatScriptHasVariable ctrl.script varName do return true
-                    )
-                )
-            )
-        )
-
-        -- 检查旋转控制器的各个轴
-        if isProperty dummyObj #rotation do
-        (
-            local rotController = dummyObj.rotation.controller
-            if classOf rotController == Euler_XYZ do
-            (
-                local rotControllers = #(rotController.x_rotation.controller, rotController.y_rotation.controller, rotController.z_rotation.controller)
-                -- 遍历旋转控制器
-                for ctrl in rotControllers do
-                (
-                    if classOf ctrl == Float_Script do
-                    (
-                        if floatScriptHasVariable ctrl.script varName do return true
-                    )
-                )
-            )
-        )
-    )
-    false
-)
-
--- 函数定义: 将控制器脚本添加到列表
-fn addScriptToList controller axisName varNames scriptsList objName =
-(
-	if classOf controller == Float_Script then 
-	(
-		for varName in varNames do
-		(
-			if floatScriptHasVariable controller.script varName then 
-			(
-			-- 如果找到对应的变量，则添加到脚本列表
-			append scriptsList (objName + "|" + axisName + "|" + controller.script)
-			break -- 找到后终止循环
-			)
-		)
-	)
-	else 
-	(
-		format "Warning: Controller on % is not a Float_Script.\n" axisName
-	)
-)
-
-
-fn getUpdatedScriptList varNames =
-(
-    local scriptsList = #() -- 用于存储与选定变量相关的脚本
-
-    -- 遍历每个变量名
-    for varName in varNames do
-    (
-        -- 遍历场景中的所有Dummy对象
-        for obj in objects where classOf obj == Dummy do
-        (
-            -- 如果Dummy对象包含该变量，处理其控制器脚本
-            if doesDummyHaveVariable obj varName do
-            (
-                local objName = obj.name
-				
-				
-                -- 先将Dummy物体的名称作为单独的列表项添加
-                append scriptsList objName
-
-                -- 检查位置控制器
-                if isProperty obj #position do
-                (
-                    local posController = obj.position.controller
-                    if classOf posController == Position_XYZ do
-                    (
-                        -- 添加每个轴的脚本到列表
-                        addScriptToList posController.x_position.controller "x_position" varNames scriptsList objName
-                        addScriptToList posController.y_position.controller "y_position" varNames scriptsList objName
-                        addScriptToList posController.z_position.controller "z_position" varNames scriptsList objName
-                    )
-                )
-
-                -- 检查旋转控制器
-                if isProperty obj #rotation do
-                (
-                    local rotController = obj.rotation.controller
-                    if classOf rotController == Euler_XYZ do
-                    (
-                        -- 添加每个轴的脚本到列表
-                        addScriptToList rotController.x_rotation.controller "x_rotation" varNames scriptsList objName
-                        addScriptToList rotController.y_rotation.controller "y_rotation" varNames scriptsList objName
-                        addScriptToList rotController.z_rotation.controller "z_rotation" varNames scriptsList objName
-                    )
-                )
-
-                -- 检查缩放控制器
-                if isProperty obj #scale do
-                (
-                    local scaleController = obj.scale.controller
-                    if classOf scaleController == Scale_XYZ do
-                    (
-                        -- 添加每个轴的脚本到列表
-                        addScriptToList scaleController.x_scale.controller "x_scale" varNames scriptsList objName
-                        addScriptToList scaleController.y_scale.controller "y_scale" varNames scriptsList objName
-                        addScriptToList scaleController.z_scale.controller "z_scale" varNames scriptsList objName
-                    )
-                )
-            )
-        )
-    )
-    scriptsList -- 返回收集到的脚本列表
-)
-
-
-
--- 函数: 从列表项中提取变量名称
-fn getVarNameFromItem item =
-(
-    local splitItem = filterString item ":"
-    if splitItem.count > 0 then return trimRight splitItem[1] else ""
-)
-
--- 函数: 根据变量名称获得Dummy对象
-fn getDummiesBasedOnVariables varNames =
-(
-    for varName in varNames do
-    (
-        varObj = for obj in objects where (classOf obj == Dummy and doesDummyHaveVariable obj varName ) collect obj
-		return varObj
-    )
-)
-
-
-	-- 函数: 获取名称相同的通道序列
-fn getSameName VarName =
-(
-    local obj = $Animcraft_Master_GRP
-    if not isValidNode obj do return 0
-
-    local targetName = replace VarName 1 3 ""
-    print ("Looking for: " + targetName)
-
+    local nonZeroValues = #()
     local custAttributesList = custAttributes.getDefs obj
+
     if custAttributesList != undefined then
     (
         for custAttrDef in custAttributesList do
         (
             local custAttrData = custAttributes.get obj custAttrDef
+
             if custAttrData != undefined do
             (
                 local propNames = getPropNames custAttrData
+
+                for propName in propNames do
+                (
+                    local propValue = getProperty custAttrData propName
+
+                    try
+                    (
+                        if classOf propValue == Float and abs(propValue) > 0.01 do
+                        (
+                            local formattedValue = (floor(propValue * 100 + 0.5)) / 100.0
+                            local displayText = (propName as string) + ": " + (formattedValue as string)
+
+                            append nonZeroValues displayText
+                        )
+                    )
+                    catch()
+                )
+            )
+        )
+    )
+
+    nonZeroValues
+)
+
+
+------------------------------------------------------------
+-- 是否包含 AC_
+------------------------------------------------------------
+
+fn isACString s =
+(
+    if s == undefined then
+    (
+        false
+    )
+    else
+    (
+        if findString s "AC_" != undefined then true else false
+    )
+)
+
+
+------------------------------------------------------------
+-- Float Script 是否包含完整变量
+------------------------------------------------------------
+
+fn floatScriptHasVariable scriptText varName =
+(
+    if scriptText == undefined do return false
+    if varName == undefined do return false
+
+    local fullVarName = "AC_" + varName
+    local tokens = filterString scriptText "+-*/^() \t\r\n"
+
+    for token in tokens do
+    (
+        if token == fullVarName do
+        (
+            return true
+        )
+    )
+
+    false
+)
+
+
+------------------------------------------------------------
+-- 根据 Axis Key 获取 Controller
+------------------------------------------------------------
+
+fn getDummyFloatController dummyObj axisKey =
+(
+    if not isValidNode dummyObj do return undefined
+
+    local resultCtrl = undefined
+
+
+    --------------------------------------------------------
+    -- Position
+    --------------------------------------------------------
+
+    if axisKey == "x_position" or axisKey == "y_position" or axisKey == "z_position" then
+    (
+        local posCtrl = safeGetPositionController dummyObj
+
+        if posCtrl != undefined do
+        (
+            if classOf posCtrl == Position_XYZ do
+            (
+                try
+                (
+                    if axisKey == "x_position" then
+                    (
+                        resultCtrl = posCtrl.x_position.controller
+                    )
+                    else if axisKey == "y_position" then
+                    (
+                        resultCtrl = posCtrl.y_position.controller
+                    )
+                    else if axisKey == "z_position" then
+                    (
+                        resultCtrl = posCtrl.z_position.controller
+                    )
+                )
+                catch()
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Rotation
+    --------------------------------------------------------
+
+    else if axisKey == "x_rotation" or axisKey == "y_rotation" or axisKey == "z_rotation" then
+    (
+        local rotCtrl = safeGetRotationController dummyObj
+
+        if rotCtrl != undefined do
+        (
+            if classOf rotCtrl == Euler_XYZ do
+            (
+                try
+                (
+                    if axisKey == "x_rotation" then
+                    (
+                        resultCtrl = rotCtrl.x_rotation.controller
+                    )
+                    else if axisKey == "y_rotation" then
+                    (
+                        resultCtrl = rotCtrl.y_rotation.controller
+                    )
+                    else if axisKey == "z_rotation" then
+                    (
+                        resultCtrl = rotCtrl.z_rotation.controller
+                    )
+                )
+                catch()
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Scale
+    --------------------------------------------------------
+
+    else if axisKey == "x_scale" or axisKey == "y_scale" or axisKey == "z_scale" then
+    (
+        local scaleCtrl = safeGetScaleController dummyObj
+
+        if scaleCtrl != undefined do
+        (
+            if classOf scaleCtrl == ScaleXYZ do
+            (
+                try
+                (
+                    if axisKey == "x_scale" then
+                    (
+                        resultCtrl = scaleCtrl.x_scale.controller
+                    )
+                    else if axisKey == "y_scale" then
+                    (
+                        resultCtrl = scaleCtrl.y_scale.controller
+                    )
+                    else if axisKey == "z_scale" then
+                    (
+                        resultCtrl = scaleCtrl.z_scale.controller
+                    )
+                )
+                catch()
+            )
+        )
+    )
+
+
+    resultCtrl
+)
+
+
+------------------------------------------------------------
+-- Transform + Axis 获取 Controller
+------------------------------------------------------------
+
+fn getTransformAxisController dummyObj transformIndex axisIndex =
+(
+    if not isValidNode dummyObj do return undefined
+
+    local axisKey = ""
+
+
+    if transformIndex == 1 then
+    (
+        if axisIndex == 1 do axisKey = "x_position"
+        if axisIndex == 2 do axisKey = "y_position"
+        if axisIndex == 3 do axisKey = "z_position"
+    )
+    else if transformIndex == 2 then
+    (
+        if axisIndex == 1 do axisKey = "x_rotation"
+        if axisIndex == 2 do axisKey = "y_rotation"
+        if axisIndex == 3 do axisKey = "z_rotation"
+    )
+    else if transformIndex == 3 then
+    (
+        if axisIndex == 1 do axisKey = "x_scale"
+        if axisIndex == 2 do axisKey = "y_scale"
+        if axisIndex == 3 do axisKey = "z_scale"
+    )
+
+
+    if axisKey == "" then
+    (
+        undefined
+    )
+    else
+    (
+        getDummyFloatController dummyObj axisKey
+    )
+)
+
+
+------------------------------------------------------------
+-- Transform + Axis -> AxisKey
+------------------------------------------------------------
+
+fn getAxisKeyByIndex transformIndex axisIndex =
+(
+    local axisKey = undefined
+
+
+    if transformIndex == 1 then
+    (
+        if axisIndex == 1 do axisKey = "x_position"
+        if axisIndex == 2 do axisKey = "y_position"
+        if axisIndex == 3 do axisKey = "z_position"
+    )
+    else if transformIndex == 2 then
+    (
+        if axisIndex == 1 do axisKey = "x_rotation"
+        if axisIndex == 2 do axisKey = "y_rotation"
+        if axisIndex == 3 do axisKey = "z_rotation"
+    )
+    else if transformIndex == 3 then
+    (
+        if axisIndex == 1 do axisKey = "x_scale"
+        if axisIndex == 2 do axisKey = "y_scale"
+        if axisIndex == 3 do axisKey = "z_scale"
+    )
+
+
+    axisKey
+)
+
+
+------------------------------------------------------------
+-- 设置 Axis Controller
+------------------------------------------------------------
+
+fn setTransformAxisController dummyObj transformIndex axisIndex newController =
+(
+    if not isValidNode dummyObj do return false
+    if newController == undefined do return false
+
+    local success = false
+
+
+    --------------------------------------------------------
+    -- Position
+    --------------------------------------------------------
+
+    if transformIndex == 1 then
+    (
+        local posCtrl = safeGetPositionController dummyObj
+
+        if posCtrl != undefined do
+        (
+            if classOf posCtrl == Position_XYZ do
+            (
+                try
+                (
+                    if axisIndex == 1 then
+                    (
+                        posCtrl.x_position.controller = newController
+                        success = true
+                    )
+                    else if axisIndex == 2 then
+                    (
+                        posCtrl.y_position.controller = newController
+                        success = true
+                    )
+                    else if axisIndex == 3 then
+                    (
+                        posCtrl.z_position.controller = newController
+                        success = true
+                    )
+                )
+                catch()
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Rotation
+    --------------------------------------------------------
+
+    else if transformIndex == 2 then
+    (
+        local rotCtrl = safeGetRotationController dummyObj
+
+        if rotCtrl != undefined do
+        (
+            if classOf rotCtrl == Euler_XYZ do
+            (
+                try
+                (
+                    if axisIndex == 1 then
+                    (
+                        rotCtrl.x_rotation.controller = newController
+                        success = true
+                    )
+                    else if axisIndex == 2 then
+                    (
+                        rotCtrl.y_rotation.controller = newController
+                        success = true
+                    )
+                    else if axisIndex == 3 then
+                    (
+                        rotCtrl.z_rotation.controller = newController
+                        success = true
+                    )
+                )
+                catch()
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Scale
+    --------------------------------------------------------
+
+    else if transformIndex == 3 then
+    (
+        local scaleCtrl = safeGetScaleController dummyObj
+
+        if scaleCtrl != undefined do
+        (
+            if classOf scaleCtrl == ScaleXYZ do
+            (
+                try
+                (
+                    if axisIndex == 1 then
+                    (
+                        scaleCtrl.x_scale.controller = newController
+                        success = true
+                    )
+                    else if axisIndex == 2 then
+                    (
+                        scaleCtrl.y_scale.controller = newController
+                        success = true
+                    )
+                    else if axisIndex == 3 then
+                    (
+                        scaleCtrl.z_scale.controller = newController
+                        success = true
+                    )
+                )
+                catch()
+            )
+        )
+    )
+
+
+    success
+)
+
+
+------------------------------------------------------------
+-- 获取旧 Controller 当前值
+--
+-- 注意：
+-- Scale 不使用 controller.value
+-- 因为 ScaleXYZ 子 Controller 可能返回 100.0
+------------------------------------------------------------
+
+fn getControllerBaseValue controller transformIndex =
+(
+    --------------------------------------------------------
+    -- Scale 强制基准 = 1.0
+    --------------------------------------------------------
+
+    if transformIndex == 3 do
+    (
+        return 1.0
+    )
+
+
+    --------------------------------------------------------
+    -- Position / Rotation 默认 = 0.0
+    --------------------------------------------------------
+
+    local resultValue = 0.0
+
+
+    if controller == undefined do
+    (
+        return resultValue
+    )
+
+
+    --------------------------------------------------------
+    -- Position / Rotation 读取旧值
+    --------------------------------------------------------
+
+    try
+    (
+        local oldValue = controller.value
+
+
+        if classOf oldValue == Float then
+        (
+            resultValue = oldValue
+        )
+        else if classOf oldValue == Integer then
+        (
+            resultValue = oldValue as float
+        )
+    )
+    catch()
+
+
+    resultValue
+)
+
+
+------------------------------------------------------------
+-- 确保 Axis 是 Float Script
+------------------------------------------------------------
+
+fn ensureAxisFloatScript dummyObj transformIndex axisIndex =
+(
+    local oldController = getTransformAxisController dummyObj transformIndex axisIndex
+
+
+    --------------------------------------------------------
+    -- Axis 不存在
+    --------------------------------------------------------
+
+    if oldController == undefined do
+    (
+        return undefined
+    )
+
+
+    --------------------------------------------------------
+    -- 已经是 Float Script
+    --------------------------------------------------------
+
+    if classOf oldController == Float_Script do
+    (
+        return oldController
+    )
+
+
+    --------------------------------------------------------
+    -- 创建 Float Script
+    --------------------------------------------------------
+
+    local newController = Float_Script()
+
+
+    --------------------------------------------------------
+    -- Scale
+    --
+    -- 非常重要：
+    --
+    -- 不读取 oldController.value
+    --
+    -- ScaleXYZ 子轨道有时读出来是 100.0
+    -- 但 Float Script 需要的基准是：
+    --
+    -- 1.0 = 100%
+    --------------------------------------------------------
+
+    if transformIndex == 3 then
+    (
+        try
+        (
+            newController.script = "1.0"
+        )
+        catch()
+    )
+
+
+    --------------------------------------------------------
+    -- Position / Rotation
+    --------------------------------------------------------
+
+    else
+    (
+        local baseValue = getControllerBaseValue oldController transformIndex
+
+
+        try
+        (
+            newController.script = baseValue as string
+        )
+        catch
+        (
+            newController.script = "0.0"
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- 替换 Axis Controller
+    --------------------------------------------------------
+
+    local replaced = setTransformAxisController dummyObj transformIndex axisIndex newController
+
+
+    if replaced then
+    (
+        local actualController = getTransformAxisController dummyObj transformIndex axisIndex
+
+
+        if actualController != undefined then
+        (
+            actualController
+        )
+        else
+        (
+            newController
+        )
+    )
+    else
+    (
+        undefined
+    )
+)
+
+
+------------------------------------------------------------
+-- Dummy 是否包含指定变量
+------------------------------------------------------------
+
+fn doesDummyHaveVariable dummyObj varName =
+(
+    if not isValidNode dummyObj do return false
+    if varName == undefined do return false
+
+
+    --------------------------------------------------------
+    -- Position
+    --------------------------------------------------------
+
+    local posCtrl = safeGetPositionController dummyObj
+
+
+    if posCtrl != undefined do
+    (
+        if classOf posCtrl == Position_XYZ do
+        (
+            local posControllers = #()
+
+
+            try (append posControllers posCtrl.x_position.controller) catch()
+            try (append posControllers posCtrl.y_position.controller) catch()
+            try (append posControllers posCtrl.z_position.controller) catch()
+
+
+            for ctrl in posControllers do
+            (
+                if ctrl != undefined do
+                (
+                    if classOf ctrl == Float_Script do
+                    (
+                        if floatScriptHasVariable ctrl.script varName do
+                        (
+                            return true
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Rotation
+    --------------------------------------------------------
+
+    local rotCtrl = safeGetRotationController dummyObj
+
+
+    if rotCtrl != undefined do
+    (
+        if classOf rotCtrl == Euler_XYZ do
+        (
+            local rotControllers = #()
+
+
+            try (append rotControllers rotCtrl.x_rotation.controller) catch()
+            try (append rotControllers rotCtrl.y_rotation.controller) catch()
+            try (append rotControllers rotCtrl.z_rotation.controller) catch()
+
+
+            for ctrl in rotControllers do
+            (
+                if ctrl != undefined do
+                (
+                    if classOf ctrl == Float_Script do
+                    (
+                        if floatScriptHasVariable ctrl.script varName do
+                        (
+                            return true
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Scale
+    --------------------------------------------------------
+
+    local scaleCtrl = safeGetScaleController dummyObj
+
+
+    if scaleCtrl != undefined do
+    (
+        if classOf scaleCtrl == ScaleXYZ do
+        (
+            local scaleControllers = #()
+
+
+            try (append scaleControllers scaleCtrl.x_scale.controller) catch()
+            try (append scaleControllers scaleCtrl.y_scale.controller) catch()
+            try (append scaleControllers scaleCtrl.z_scale.controller) catch()
+
+
+            for ctrl in scaleControllers do
+            (
+                if ctrl != undefined do
+                (
+                    if classOf ctrl == Float_Script do
+                    (
+                        if floatScriptHasVariable ctrl.script varName do
+                        (
+                            return true
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+
+    false
+)
+
+
+------------------------------------------------------------
+-- Controller 是否包含任意变量
+------------------------------------------------------------
+
+fn controllerHasAnyVariable controller varNames =
+(
+    if controller == undefined do return false
+    if classOf controller != Float_Script do return false
+
+
+    for varName in varNames do
+    (
+        if floatScriptHasVariable controller.script varName do
+        (
+            return true
+        )
+    )
+
+
+    false
+)
+
+
+------------------------------------------------------------
+-- 添加 Track Row
+------------------------------------------------------------
+
+fn appendFloatTrack rows obj controller transformName transformCode axisName axisKey varNames =
+(
+    if controller != undefined do
+    (
+        if classOf controller == Float_Script do
+        (
+            if controllerHasAnyVariable controller varNames do
+            (
+                local row = #(
+                    obj.name,
+                    transformName,
+                    transformCode,
+                    axisName,
+                    axisKey,
+                    controller.script
+                )
+
+
+                append rows row
+            )
+        )
+    )
+)
+
+
+------------------------------------------------------------
+-- 收集 Float Script Rows
+------------------------------------------------------------
+
+fn collectFloatScriptRows varNames =
+(
+    local rows = #()
+
+
+    if varNames == undefined do return rows
+    if varNames.count == 0 do return rows
+
+
+    for obj in objects where classOf obj == Dummy do
+    (
+        ----------------------------------------------------
+        -- Position
+        ----------------------------------------------------
+
+        local posCtrl = safeGetPositionController obj
+
+
+        if posCtrl != undefined do
+        (
+            if classOf posCtrl == Position_XYZ do
+            (
+                local xCtrl = undefined
+                local yCtrl = undefined
+                local zCtrl = undefined
+
+
+                try (xCtrl = posCtrl.x_position.controller) catch()
+                try (yCtrl = posCtrl.y_position.controller) catch()
+                try (zCtrl = posCtrl.z_position.controller) catch()
+
+
+                if xCtrl != undefined do
+                (
+                    appendFloatTrack rows obj xCtrl "Position" "P" "X" "x_position" varNames
+                )
+
+
+                if yCtrl != undefined do
+                (
+                    appendFloatTrack rows obj yCtrl "Position" "P" "Y" "y_position" varNames
+                )
+
+
+                if zCtrl != undefined do
+                (
+                    appendFloatTrack rows obj zCtrl "Position" "P" "Z" "z_position" varNames
+                )
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Rotation
+        ----------------------------------------------------
+
+        local rotCtrl = safeGetRotationController obj
+
+
+        if rotCtrl != undefined do
+        (
+            if classOf rotCtrl == Euler_XYZ do
+            (
+                local xCtrl = undefined
+                local yCtrl = undefined
+                local zCtrl = undefined
+
+
+                try (xCtrl = rotCtrl.x_rotation.controller) catch()
+                try (yCtrl = rotCtrl.y_rotation.controller) catch()
+                try (zCtrl = rotCtrl.z_rotation.controller) catch()
+
+
+                if xCtrl != undefined do
+                (
+                    appendFloatTrack rows obj xCtrl "Rotation" "R" "X" "x_rotation" varNames
+                )
+
+
+                if yCtrl != undefined do
+                (
+                    appendFloatTrack rows obj yCtrl "Rotation" "R" "Y" "y_rotation" varNames
+                )
+
+
+                if zCtrl != undefined do
+                (
+                    appendFloatTrack rows obj zCtrl "Rotation" "R" "Z" "z_rotation" varNames
+                )
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Scale
+        ----------------------------------------------------
+
+        local scaleCtrl = safeGetScaleController obj
+
+
+        if scaleCtrl != undefined do
+        (
+            if classOf scaleCtrl == ScaleXYZ do
+            (
+                local xCtrl = undefined
+                local yCtrl = undefined
+                local zCtrl = undefined
+
+
+                try (xCtrl = scaleCtrl.x_scale.controller) catch()
+                try (yCtrl = scaleCtrl.y_scale.controller) catch()
+                try (zCtrl = scaleCtrl.z_scale.controller) catch()
+
+
+                if xCtrl != undefined do
+                (
+                    appendFloatTrack rows obj xCtrl "Scale" "S" "X" "x_scale" varNames
+                )
+
+
+                if yCtrl != undefined do
+                (
+                    appendFloatTrack rows obj yCtrl "Scale" "S" "Y" "y_scale" varNames
+                )
+
+
+                if zCtrl != undefined do
+                (
+                    appendFloatTrack rows obj zCtrl "Scale" "S" "Z" "z_scale" varNames
+                )
+            )
+        )
+    )
+
+
+    rows
+)
+
+
+------------------------------------------------------------
+-- 获取变量名
+------------------------------------------------------------
+
+fn getVarNameFromItem item =
+(
+    if item == undefined do return ""
+
+
+    local splitItem = filterString item ":"
+
+
+    if splitItem.count > 0 then
+    (
+        trimRight splitItem[1]
+    )
+    else
+    (
+        ""
+    )
+)
+
+
+------------------------------------------------------------
+-- 获取包含变量的 Dummy
+------------------------------------------------------------
+
+fn getDummiesBasedOnVariables varNames =
+(
+    local result = #()
+
+
+    for obj in objects where classOf obj == Dummy do
+    (
+        local found = false
+
+
+        for varName in varNames while found == false do
+        (
+            if doesDummyHaveVariable obj varName do
+            (
+                append result obj
+
+                found = true
+            )
+        )
+    )
+
+
+    result
+)
+
+
+------------------------------------------------------------
+-- 获取 Animcraft Master Custom Attribute 序号
+------------------------------------------------------------
+
+fn getSameName VarName =
+(
+    local obj = $Animcraft_Master_GRP
+
+
+    if not isValidNode obj do return 0
+
+
+    local targetName = replace VarName 1 3 ""
+
+
+    local custAttributesList = custAttributes.getDefs obj
+
+
+    if custAttributesList != undefined then
+    (
+        for custAttrDef in custAttributesList do
+        (
+            local custAttrData = custAttributes.get obj custAttrDef
+
+
+            if custAttrData != undefined do
+            (
+                local propNames = getPropNames custAttrData
+
+
                 for i = 1 to propNames.count do
                 (
                     local propNameAsString = propNames[i] as string
+
+
                     if propNameAsString == targetName do
                     (
                         return i
@@ -255,498 +1109,1639 @@ fn getSameName VarName =
             )
         )
     )
+
+
     0
 )
 
 
--- 全局变量定义
-global selectedValue = undefined  -- 存储Non-Zero Spinners选中的变量名
-global selectedScript  -- 存储float script 选中的文本内容
-global selectedScriptIndex    -- 存储float script 选中脚本的索引
-global updatedScript = "" -- 存储更新后的脚本
-global modifyScript -- 存储要修改的脚本
-global listNum  -- 存储列表中选中项的编号
-global dummyController = undefined  --存储物体的脚本控制器
-global updatedScriptList = #()
+------------------------------------------------------------
+-- 找当前变量对应 Expression 片段
+------------------------------------------------------------
 
--- rollout定义: 编辑浮点脚本对话框
-rollout editFloatScriptRollout "Edit Float Script" width:300 height:120
+fn findVariableFragment scriptText varName =
 (
-	-- 文本编辑框用于显示和编辑脚本
-	editText edtScript "Script" width:280 height:60 pos:[10,10] multiline:true
-	-- 保存按钮，用于保存编辑后的脚本
-	button btnSave "Save" width:280 height:20 pos:[10,80]
-	-- 当对话框打开时，初始化脚本编辑框的内容
-	on editFloatScriptRollout open do
-	(
-		if selectedScript != undefined do
-		(
-			edtScript.text = modifyScript -- 使用选中的脚本初始化编辑框
-		)
-	)
+    if scriptText == undefined do return undefined
+    if varName == undefined do return undefined
 
--- 当点击保存按钮时执行的操作
-	on btnSave pressed do
-	(
-		if selectedScript != undefined then  
-		(
-				-- 获取并选择相关的Dummy对象
-			local dummyName = (filterString selectedScript "|")[1]
-			local theDummy = getNodeByName dummyName
-			if theDummy != undefined then 
-			(
-				local axisFloatScriptName  = (filterString selectedScript "|")[2]
-				local posController = theDummy.position.controller
-				local rotController = theDummy.rotation.controller
-				local scaleController = theDummy.scale.controller
-				
-				if findString axisFloatScriptName "position" != undefined then
-				(
-					if isProperty theDummy #position and classOf theDummy.position.controller == Position_XYZ do
-					(
-						local posController = theDummy.position.controller
-						if findString axisFloatScriptName "x" != undefined and classOf posController.x_position.controller == Float_Script do
-							dummyController = posController.x_position.controller
-						if findString axisFloatScriptName "y" != undefined and classOf posController.y_position.controller == Float_Script do
-							dummyController = posController.y_position.controller
-						if findString axisFloatScriptName "z" != undefined and classOf posController.z_position.controller == Float_Script do
-							dummyController = posController.z_position.controller
-					)
-				)
-				else if findString axisFloatScriptName "rotation" != undefined then
-				(
-					if isProperty theDummy #rotation and classOf theDummy.rotation.controller == Euler_XYZ do
-					(
-						local rotController = theDummy.rotation.controller
-						if findString axisFloatScriptName "x" != undefined and classOf rotController.x_rotation.controller == Float_Script do
-							dummyController = rotController.x_rotation.controller
-						if findString axisFloatScriptName "y" != undefined and classOf rotController.y_rotation.controller == Float_Script do
-							dummyController = rotController.y_rotation.controller
-						if findString axisFloatScriptName "z" != undefined and classOf rotController.z_rotation.controller == Float_Script do
-							dummyController = rotController.z_rotation.controller
-					)
-				)
-				else if findString axisFloatScriptName "scale" != undefined then
-				(
-					if isProperty theDummy #scale and classOf theDummy.scale.controller == Scale_XYZ do
-					(
-						local scaleController = theDummy.scale.controller
-						if findString axisFloatScriptName "x" != undefined and classOf scaleController.x_scale.controller == Float_Script do
-							dummyController = scaleController.x_scale.controller
-						if findString axisFloatScriptName "y" != undefined and classOf scaleController.y_scale.controller == Float_Script do
-							dummyController = scaleController.y_scale.controller
-						if findString axisFloatScriptName "z" != undefined and classOf scaleController.z_scale.controller == Float_Script do
-							dummyController = scaleController.z_scale.controller
-					)
-					
-				)
-				
-				if dummyController != undefined then
-				(
-					oldScript = dummyController.script
-					
-					-- 对选中脚本进行重新格式化
-					local words = (filterString selectedScript "|+")
-					if listNum != undefined then 
-						words[listNum] = edtScript.text
 
-					-- 重构脚本字符串
-					newstr = ""
-					for i = 3 to words.count do (
-						newstr += words[i] + "+"
-					)
-					newstr = trimRight newstr "+" -- 移除最后一个多余的加号
+    local parts = filterString scriptText "+"
 
-					dummyController.script = newstr
-					updatedScript  = newstr
-					
-					if selectedValue != undefined then 
-					(
-						-- 构建包含所需变量名的数组
-						local varNames = #(selectedValue)
-						
-						-- 调用 getUpdatedScriptList 函数并传递数组
-						updatedScriptList = getUpdatedScriptList varNames
-					)
-					
-					destroyDialog editFloatScriptRollout -- 关闭编辑对话框
-					
-					 -- 更新floatScriptsRollout 的列表内容
-					if floatScriptsRollout != undefined then
-					(
-						
-						-- 重新设置列表项
-						floatScriptsRollout.lstFloatScripts.items = updatedScriptList
-						
-					)
-					
-					redrawViews()
-				)
-				else messagebox "Controller not found."
-				
-				
-				
-			)
-			else messagebox "Dummy object not found."
-			
-		)
-		else messagebox "No script selected."
-		
-		
-	)
 
-)	
-
--- rollout定义: 浮点脚本列表显示
-rollout floatScriptsRollout "Float Scripts" width:1900 height:340
-(
-	-- 列表框，用于显示所有的浮点脚本
-	listBox lstFloatScripts "Scripts" width:1880 height:20 pos:[10,10]
-	
-	radioButtons 'rdo_trans' "Transform"   height:30 align:#left labels:#("Position", "Rotation", "Scale") columns:3 across:3
-	
-	radioButtons 'rdo_Axis' "Axis"   height:30 align:#left labels:#("X", "Y", "Z")  columns:3
-	
-	button btn_add "添加" width:200  height:30
-	
-	
-	
-	
-	
-	
-	-- 更新列表中特定项的脚本
-	fn updateFloatScriptItem index newScript =
-	(
-		if index != undefined and index > 0 and index <= lstFloatScripts.items.count do
-		(
-		lstFloatScripts.items[index] = newScript -- 更新列表项
-		)
-	)
-	
-	-- 当对话框打开时执行的操作
-	on floatScriptsRollout open do
-	(
-		lstFloatScripts.width = 1880
-		floatScriptsRollout.width = 1900
-		if updatedScriptList.count > 0 do
+    for part in parts do
+    (
+        if floatScriptHasVariable part varName do
         (
-            lstFloatScripts.items = updatedScriptList
-            updatedScriptList = #() -- 清空全局变量，避免重复更新
+            return part
         )
-	)
+    )
 
 
-	
-	on floatScriptsRollout resized size do
-	(
-		-- 计算新的列表宽度
-        local newWidth = (size.x - 20)
-		lstFloatScripts.width = newWidth
-	)
-	
-
-	-- 当在列表中选择一个项时执行的操作
-	on lstFloatScripts selected index do
-	(
-		selectedScript = lstFloatScripts.items[index]
-		selectedScriptIndex = index
-		
-		-- 获取并选择相关的Dummy对象
-		local dummyName = (filterString selectedScript "|")[1]
-		local theDummy = getNodeByName dummyName
-		if theDummy != undefined do select theDummy
-			
-		-- 清除上一条的片段，只在脚本内容中匹配完整变量名
-		modifyScript = undefined
-		local varScripts = (filterString selectedScript "|+")
-		if (filterString selectedScript "|").count >= 3 do
-		(
-			for i = 3 to varScripts.count do
-			(
-				if floatScriptHasVariable varScripts[i] selectedValue do
-				(
-					modifyScript = varScripts[i]  -- 保留原始片段用于编辑
-				)
-			)
-		)
-	)
-
-	-- 当在列表中双击一个项时执行的操作
-	on lstFloatScripts doubleClicked index do
-	(
-		selectedScriptIndex = index
-		selectedScript = lstFloatScripts.items[index]
-		modifyScript = undefined
-		listNum = undefined
-		
-		if (filterString selectedScript "|").count < 3 then
-		(
-			messagebox "This is a Dummy name. Double-click a script row below it."
-		)
-		else
-		(
-			local varScripts = (filterString selectedScript "|+")
-			for i = 3 to varScripts.count do
-			(
-				if floatScriptHasVariable varScripts[i] selectedValue do
-				(
-					modifyScript = varScripts[i]  -- 保留括号、符号和空白
-					listNum = i  -- 与保存时使用的原始片段索引保持一致
-				)
-			)
-			
-			if listNum != undefined then
-			(
-				try (DestroyDialog editFloatScriptRollout) catch()
-				CreateDialog editFloatScriptRollout
-			)
-			else
-			(
-				messagebox "The selected variable was not found in this script. Please refresh the list."
-			)
-		)
-	)
-	
-	on btn_add pressed do 
-	(
-		if selection.count == 1 and classof selection[1] == Dummy then 
-		(
-			local dummyObj = selection[1]
-			local controller = dummyObj[3][rdo_trans.state][rdo_Axis.state].controller
-			local custAttributesDefs =  $Animcraft_Master_GRP.custom_attributes
-			
-			if controller != undefined and classOf controller == Float_Script then
-			(
-				
-				local newVarName = "AC_" + selectedValue
-				
-
-				if newVarName != undefined and modifyScript != undefined then
-				(
-					--这里可以正常执行
-					
-					local existingScript = controller.script
-					
-					custAttrDefNumber = getSameName newVarName
-					
-					if custAttrDefNumber != 0 then
-					(
-						controller.addTarget newVarName custAttributesDefs[custAttrDefNumber]
-						
-						
-						if existingScript != undefined and classOf existingScript == String then
-						(
-							
-							newModifyScript = (filterString modifyScript "*")  
-							
-							for part in newModifyScript do
-							(
-								if isString part then
-								(
-									local fixedPart = substituteString part ")" ""
-									
-									if fixedPart != undefined then  -- 确保fixedPart已定义
-									(
-										controller.script = existingScript + "+" + fixedPart
-									)
-								)
-									
-							)
-						)
-						else
-						(
-							messagebox "Existing script or modify script is invalid."
-						)
-						
-					)
-					
-					-- 获取更新后的脚本列表
-					updatedScriptList = getUpdatedScriptList #(selectedValue)  -- 假设selectedValue包含需要更新的变量名
-					
-					-- 调用函数刷新floatScriptsRollout的列表内容
-					if floatScriptsRollout != undefined then
-					(
-						floatScriptsRollout.lstFloatScripts.items = updatedScriptList
-					)
-					f
-					redrawViews()
-					
-				)
-				else
-				(
-					messagebox "New variable name or modify script is undefined."
-				)
-				
-			)
-			else
-			(
-				messagebox "Selected controller is not a Float_Script or undefined. Cannot add the script."
-			)
-		)
-		else
-		(
-			messagebox "Please select one Dummy object."
-		)
-	)
-
-
-
-
-
-
-	
+    undefined
 )
 
 
+------------------------------------------------------------
+-- 当前变量 Expression 编辑器
+------------------------------------------------------------
 
-
-fn processController dummyObj controllerType varName =
+rollout editFloatScriptRollout "Edit Variable Expression" width:560 height:190
 (
-    if isProperty dummyObj controllerType do
+    label lblTitle "Current Variable Expression:" pos:[10,10] width:520 height:18
+
+    editText edtScript "" pos:[10,32] width:540 height:105 multiline:true
+
+    button btnSave "保存修改" pos:[10,148] width:265 height:30
+
+    button btnCancel "取消" pos:[285,148] width:265 height:30
+
+
+    on editFloatScriptRollout open do
     (
-        local controller = getProperty dummyObj controllerType
-        if classOf controller == Position_XYZ or classOf controller == Euler_XYZ or classOf controller == Scale_XYZ do
+        if modifyScript != undefined then
         (
-            local axesControllers = #(controller[1].controller, controller[2].controller, controller[3].controller)
-            for ctrl in axesControllers do
+            edtScript.text = modifyScript
+        )
+        else
+        (
+            edtScript.text = ""
+        )
+    )
+
+
+    on btnSave pressed do
+    (
+        local canContinue = true
+
+
+        if selectedScript == undefined then
+        (
+            messageBox "没有选中的 Float Script。"
+
+            canContinue = false
+        )
+
+
+        if canContinue do
+        (
+            local data = filterString selectedScript "|"
+
+
+            if data.count < 2 then
             (
-                if classOf ctrl == Float_Script and (findString ctrl.script varName) != undefined do
-                    return true
+                messageBox "无法解析当前 Float Script。"
+
+                canContinue = false
+            )
+
+
+            if canContinue do
+            (
+                local dummyName = data[1]
+
+                local axisKey = data[2]
+
+                local theDummy = getNodeByName dummyName
+
+
+                if not isValidNode theDummy then
+                (
+                    messageBox "Dummy object not found."
+
+                    canContinue = false
+                )
+
+
+                if canContinue do
+                (
+                    dummyController = getDummyFloatController theDummy axisKey
+
+
+                    if dummyController == undefined then
+                    (
+                        messageBox "Controller not found."
+
+                        canContinue = false
+                    )
+                    else if classOf dummyController != Float_Script then
+                    (
+                        messageBox "Controller is not Float_Script."
+
+                        canContinue = false
+                    )
+
+
+                    if canContinue do
+                    (
+                        if modifyScript == undefined then
+                        (
+                            messageBox "没有找到当前变量对应的 Expression。"
+
+                            canContinue = false
+                        )
+                    )
+
+
+                    if canContinue do
+                    (
+                        local oldScript = dummyController.script
+
+                        local newPart = edtScript.text
+
+                        local newScript = substituteString oldScript modifyScript newPart
+
+
+                        try
+                        (
+                            dummyController.script = newScript
+
+                            updatedScript = newScript
+
+                            modifyScript = newPart
+
+                            redrawViews()
+
+                            try (floatScriptsRollout.refreshTrackList()) catch()
+
+                            destroyDialog editFloatScriptRollout
+                        )
+                        catch
+                        (
+                            local err = getCurrentException() as string
+
+                            messageBox ("Expression 写入失败。\n\n" + err)
+                        )
+                    )
+                )
             )
         )
     )
-    false
+
+
+    on btnCancel pressed do
+    (
+        destroyDialog editFloatScriptRollout
+    )
 )
 
 
--- 函数定义: 显示与选定变量相关的Dummy对象的浮点脚本
+------------------------------------------------------------
+-- Float Script 主窗口
+------------------------------------------------------------
+
+rollout floatScriptsRollout "AnimCraft Float Scripts" width:1400 height:650
+(
+    local trackRows = #()
+
+
+    --------------------------------------------------------
+    -- 左侧
+    --------------------------------------------------------
+
+    label lblTracks "Float Script Tracks - Grouped by Object" pos:[10,10] width:400 height:18
+
+    dotNetControl lvTracks "System.Windows.Forms.ListView" pos:[10,32] width:520 height:500
+
+
+    --------------------------------------------------------
+    -- 右侧
+    --------------------------------------------------------
+
+    label lblExpression "Expression" pos:[545,10] width:100 height:18
+
+    label lblCurrent "No Track Selected" pos:[650,10] width:730 height:18
+
+    dotNetControl edtExpression "System.Windows.Forms.TextBox" pos:[545,32] width:845 height:500
+
+
+    --------------------------------------------------------
+    -- Bottom
+    --------------------------------------------------------
+
+    groupBox grpTarget "Add Variable To Selected Dummy" pos:[10,542] width:1380 height:95
+
+
+    dropDownList ddlTransform "Transform:" items:#("Position", "Rotation", "Scale") selection:1 pos:[25,562] width:155
+
+
+    checkBox chkX "X" checked:true pos:[205,580] width:40
+
+    checkBox chkY "Y" checked:false pos:[250,580] width:40
+
+    checkBox chkZ "Z" checked:false pos:[295,580] width:40
+
+
+    button btnAdd "添加到选择的 Dummy" pos:[350,570] width:170 height:32
+
+    button btnApplyExpression "应用完整 Expression" pos:[535,570] width:170 height:32
+
+    button btnEditPart "编辑当前变量片段" pos:[720,570] width:160 height:32
+
+    button btnSelectNode "选择列表对象" pos:[895,570] width:115 height:32
+
+    button btnRefresh "刷新" pos:[1025,570] width:90 height:32
+
+
+    label lblStatus "Ready" pos:[1130,578] width:250 height:18
+
+
+    --------------------------------------------------------
+    -- 初始化 ListView
+    --------------------------------------------------------
+
+    fn initListView =
+    (
+        local viewClass = dotNetClass "System.Windows.Forms.View"
+
+
+        lvTracks.View = viewClass.Details
+
+        lvTracks.FullRowSelect = true
+
+        lvTracks.GridLines = false
+
+        lvTracks.HideSelection = false
+
+        lvTracks.MultiSelect = false
+
+        lvTracks.ShowGroups = true
+
+
+        lvTracks.Columns.Clear()
+
+        lvTracks.Groups.Clear()
+
+
+        lvTracks.Columns.Add "Transform" 135
+
+        lvTracks.Columns.Add "Axis" 75
+
+        lvTracks.Columns.Add "Controller" 160
+
+
+        try
+        (
+            lvTracks.HeaderStyle = (dotNetClass "System.Windows.Forms.ColumnHeaderStyle").Nonclickable
+        )
+        catch()
+
+
+        try
+        (
+            local colorClass = dotNetClass "System.Drawing.Color"
+
+            lvTracks.BackColor = colorClass.FromArgb 245 245 245
+        )
+        catch()
+    )
+
+
+    --------------------------------------------------------
+    -- Expression Editor
+    --------------------------------------------------------
+
+    fn initExpressionEditor =
+    (
+        local scrollClass = dotNetClass "System.Windows.Forms.ScrollBars"
+
+
+        edtExpression.Multiline = true
+
+        edtExpression.ScrollBars = scrollClass.Both
+
+        edtExpression.WordWrap = false
+
+        edtExpression.AcceptsReturn = true
+
+        edtExpression.AcceptsTab = true
+
+
+        try
+        (
+            edtExpression.Font = dotNetObject "System.Drawing.Font" "Consolas" 10.0
+        )
+        catch()
+    )
+
+
+    --------------------------------------------------------
+    -- Object Group
+    --------------------------------------------------------
+
+    fn getOrCreateObjectGroup objectName =
+    (
+        local foundGroup = undefined
+
+
+        if lvTracks.Groups.Count > 0 do
+        (
+            for i = 0 to lvTracks.Groups.Count - 1 while foundGroup == undefined do
+            (
+                local grp = lvTracks.Groups.Item[i]
+
+
+                if grp.Header == objectName do
+                (
+                    foundGroup = grp
+                )
+            )
+        )
+
+
+        if foundGroup == undefined do
+        (
+            foundGroup = dotNetObject "System.Windows.Forms.ListViewGroup" objectName
+
+
+            try
+            (
+                foundGroup.HeaderAlignment = (dotNetClass "System.Windows.Forms.HorizontalAlignment").Left
+            )
+            catch()
+
+
+            lvTracks.Groups.Add foundGroup
+        )
+
+
+        foundGroup
+    )
+
+
+    --------------------------------------------------------
+    -- Add Track Item
+    --------------------------------------------------------
+
+    fn addTrackItem row rowIndex =
+    (
+        local objectName = row[1]
+
+        local transformName = row[2]
+
+        local transformCode = row[3]
+
+        local axisName = row[4]
+
+
+        local item = dotNetObject "System.Windows.Forms.ListViewItem" transformName
+
+
+        item.SubItems.Add axisName
+
+        item.SubItems.Add "Float Script"
+
+
+        item.Tag = rowIndex as string
+
+
+        local objectGroup = getOrCreateObjectGroup objectName
+
+
+        item.Group = objectGroup
+
+
+        try
+        (
+            item.UseItemStyleForSubItems = false
+
+
+            local colorClass = dotNetClass "System.Drawing.Color"
+
+
+            if transformCode == "P" do
+            (
+                item.SubItems.Item[0].ForeColor = colorClass.SteelBlue
+            )
+
+
+            if transformCode == "R" do
+            (
+                item.SubItems.Item[0].ForeColor = colorClass.DarkOrange
+            )
+
+
+            if transformCode == "S" do
+            (
+                item.SubItems.Item[0].ForeColor = colorClass.SeaGreen
+            )
+
+
+            item.SubItems.Item[1].ForeColor = colorClass.FromArgb 70 70 70
+        )
+        catch()
+
+
+        lvTracks.Items.Add item
+    )
+
+
+    --------------------------------------------------------
+    -- 获取当前 Track
+    --------------------------------------------------------
+
+    fn getSelectedTrack =
+    (
+        if lvTracks.SelectedItems.Count == 0 do
+        (
+            return undefined
+        )
+
+
+        local item = lvTracks.SelectedItems.Item[0]
+
+        local rowIndex = (item.Tag as string) as integer
+
+
+        if rowIndex < 1 do
+        (
+            return undefined
+        )
+
+
+        if rowIndex > trackRows.count do
+        (
+            return undefined
+        )
+
+
+        trackRows[rowIndex]
+    )
+
+
+    --------------------------------------------------------
+    -- 自动选择 Track
+    --------------------------------------------------------
+
+    fn selectTrackByNodeAndAxis nodeName axisKey =
+    (
+        if nodeName == undefined do return false
+        if axisKey == undefined do return false
+
+
+        local foundRowIndex = 0
+
+
+        for i = 1 to trackRows.count while foundRowIndex == 0 do
+        (
+            local row = trackRows[i]
+
+
+            if row[1] == nodeName and row[5] == axisKey do
+            (
+                foundRowIndex = i
+            )
+        )
+
+
+        if foundRowIndex == 0 do
+        (
+            return false
+        )
+
+
+        local foundItem = undefined
+
+
+        if lvTracks.Items.Count > 0 do
+        (
+            for i = 0 to lvTracks.Items.Count - 1 while foundItem == undefined do
+            (
+                local item = lvTracks.Items.Item[i]
+
+                local itemRowIndex = 0
+
+
+                try
+                (
+                    itemRowIndex = (item.Tag as string) as integer
+                )
+                catch()
+
+
+                if itemRowIndex == foundRowIndex do
+                (
+                    foundItem = item
+                )
+            )
+        )
+
+
+        if foundItem == undefined do
+        (
+            return false
+        )
+
+
+        try
+        (
+            if lvTracks.Items.Count > 0 do
+            (
+                for i = 0 to lvTracks.Items.Count - 1 do
+                (
+                    lvTracks.Items.Item[i].Selected = false
+                )
+            )
+
+
+            foundItem.Selected = true
+
+            foundItem.Focused = true
+
+            foundItem.EnsureVisible()
+
+            lvTracks.Focus()
+
+
+            updateSelectionInfo trackRows[foundRowIndex]
+
+
+            true
+        )
+        catch
+        (
+            false
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- XYZ Checkbox 状态
+    --------------------------------------------------------
+
+    fn updateAxisCheckboxState =
+    (
+        chkX.enabled = true
+
+        chkY.enabled = true
+
+        chkZ.enabled = true
+
+
+        if selection.count != 1 do
+        (
+            return false
+        )
+
+
+        local obj = selection[1]
+
+
+        if not isValidNode obj do
+        (
+            return false
+        )
+
+
+        if selectedValue == undefined do
+        (
+            return false
+        )
+
+
+        local xCtrl = getTransformAxisController obj ddlTransform.selection 1
+
+        local yCtrl = getTransformAxisController obj ddlTransform.selection 2
+
+        local zCtrl = getTransformAxisController obj ddlTransform.selection 3
+
+
+        ----------------------------------------------------
+        -- X
+        ----------------------------------------------------
+
+        if xCtrl != undefined do
+        (
+            if classOf xCtrl == Float_Script do
+            (
+                if floatScriptHasVariable xCtrl.script selectedValue do
+                (
+                    chkX.checked = false
+
+                    chkX.enabled = false
+                )
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Y
+        ----------------------------------------------------
+
+        if yCtrl != undefined do
+        (
+            if classOf yCtrl == Float_Script do
+            (
+                if floatScriptHasVariable yCtrl.script selectedValue do
+                (
+                    chkY.checked = false
+
+                    chkY.enabled = false
+                )
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Z
+        ----------------------------------------------------
+
+        if zCtrl != undefined do
+        (
+            if classOf zCtrl == Float_Script do
+            (
+                if floatScriptHasVariable zCtrl.script selectedValue do
+                (
+                    chkZ.checked = false
+
+                    chkZ.enabled = false
+                )
+            )
+        )
+
+
+        true
+    )
+
+
+    --------------------------------------------------------
+    -- 更新选中 Track 信息
+    --------------------------------------------------------
+
+    fn updateSelectionInfo row =
+    (
+        if row != undefined do
+        (
+            local nodeName = row[1]
+
+            local transformName = row[2]
+
+            local axisName = row[4]
+
+            local axisKey = row[5]
+
+            local scriptText = row[6]
+
+
+            local obj = getNodeByName nodeName
+
+
+            if isValidNode obj do
+            (
+                try (select obj) catch()
+            )
+
+
+            edtExpression.Text = scriptText
+
+
+            lblCurrent.text = nodeName + "    " + transformName + " / " + axisName
+
+
+            selectedScript = nodeName + "|" + axisKey + "|" + scriptText
+
+
+            modifyScript = findVariableFragment scriptText selectedValue
+
+
+            if modifyScript != undefined then
+            (
+                lblStatus.text = "Variable fragment found"
+            )
+            else
+            (
+                lblStatus.text = "Variable fragment not found"
+            )
+
+
+            updateAxisCheckboxState()
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Group 数量
+    --------------------------------------------------------
+
+    fn getObjectGroupCount =
+    (
+        lvTracks.Groups.Count
+    )
+
+
+    --------------------------------------------------------
+    -- Refresh
+    --------------------------------------------------------
+
+    fn refreshTrackList =
+    (
+        local vars = currentFloatScriptVarNames
+
+
+        if vars == undefined do
+        (
+            vars = #()
+        )
+
+
+        if vars.count == 0 do
+        (
+            if selectedValue != undefined do
+            (
+                vars = #(selectedValue)
+            )
+        )
+
+
+        trackRows = collectFloatScriptRows vars
+
+
+        lvTracks.BeginUpdate()
+
+
+        lvTracks.Items.Clear()
+
+        lvTracks.Groups.Clear()
+
+
+        for i = 1 to trackRows.count do
+        (
+            addTrackItem trackRows[i] i
+        )
+
+
+        lvTracks.EndUpdate()
+
+
+        edtExpression.Text = ""
+
+        lblCurrent.text = "No Track Selected"
+
+
+        selectedScript = undefined
+
+        modifyScript = undefined
+
+
+        local objectCount = getObjectGroupCount()
+
+
+        lblStatus.text = "Objects: " + (objectCount as string) + "   Tracks: " + (trackRows.count as string)
+
+
+        updateAxisCheckboxState()
+    )
+
+
+    --------------------------------------------------------
+    -- 添加变量到 Float Script
+    --------------------------------------------------------
+
+    fn addVariableToController controller =
+    (
+        if controller == undefined do return false
+
+        if classOf controller != Float_Script do return false
+
+        if selectedValue == undefined do return false
+
+        if modifyScript == undefined do return false
+
+
+        ----------------------------------------------------
+        -- 防重复
+        ----------------------------------------------------
+
+        if floatScriptHasVariable controller.script selectedValue do
+        (
+            return false
+        )
+
+
+        ----------------------------------------------------
+        -- Master
+        ----------------------------------------------------
+
+        local master = $Animcraft_Master_GRP
+
+
+        if not isValidNode master then
+        (
+            messageBox "Animcraft_Master_GRP not found."
+
+            return false
+        )
+
+
+        local newVarName = "AC_" + selectedValue
+
+        local custAttrDefNumber = getSameName newVarName
+
+
+        if custAttrDefNumber == 0 then
+        (
+            messageBox ("Animcraft_Master_GRP 中没有找到：\n" + newVarName)
+
+            return false
+        )
+
+
+        local custAttributesDefs = master.custom_attributes
+
+
+        ----------------------------------------------------
+        -- Add Target
+        ----------------------------------------------------
+
+        try
+        (
+            controller.addTarget newVarName custAttributesDefs[custAttrDefNumber]
+        )
+        catch
+        (
+            local err = getCurrentException() as string
+
+
+            messageBox ("addTarget 失败：\n" + newVarName + "\n\n" + err)
+
+
+            return false
+        )
+
+
+        ----------------------------------------------------
+        -- 来源变量
+        ----------------------------------------------------
+
+        local existingScript = controller.script
+
+        local modifyParts = filterString modifyScript "*"
+
+        local variablePart = undefined
+
+
+        for part in modifyParts do
+        (
+            if isACString part do
+            (
+                variablePart = substituteString part ")" ""
+            )
+        )
+
+
+        if variablePart == undefined do
+        (
+            variablePart = newVarName
+        )
+
+
+        ----------------------------------------------------
+        -- Expression
+        ----------------------------------------------------
+
+        try
+        (
+            if existingScript == undefined or existingScript == "" then
+            (
+                controller.script = variablePart
+            )
+            else
+            (
+                controller.script = existingScript + "+" + variablePart
+            )
+        )
+        catch
+        (
+            local err = getCurrentException() as string
+
+
+            messageBox ("Expression 写入失败。\n\n" + err)
+
+
+            return false
+        )
+
+
+        true
+    )
+
+
+    --------------------------------------------------------
+    -- Open
+    --------------------------------------------------------
+
+    on floatScriptsRollout open do
+    (
+        initListView()
+
+        initExpressionEditor()
+
+        refreshTrackList()
+
+
+        try
+        (
+            callbacks.removeScripts id:#AnimCraftFloatAxisState
+        )
+        catch()
+
+
+        callbacks.addScript #selectionSetChanged "try(floatScriptsRollout.updateAxisCheckboxState())catch()" id:#AnimCraftFloatAxisState
+
+
+        updateAxisCheckboxState()
+    )
+
+
+    --------------------------------------------------------
+    -- Close
+    --------------------------------------------------------
+
+    on floatScriptsRollout close do
+    (
+        try
+        (
+            callbacks.removeScripts id:#AnimCraftFloatAxisState
+        )
+        catch()
+    )
+
+
+    --------------------------------------------------------
+    -- Resize
+    --------------------------------------------------------
+
+    on floatScriptsRollout resized size do
+    (
+        local leftWidth = 520
+
+
+        if size.x < 1150 do
+        (
+            leftWidth = 420
+        )
+
+
+        if size.x > 1650 do
+        (
+            leftWidth = 600
+        )
+
+
+        local rightX = leftWidth + 25
+
+        local contentHeight = size.y - 118
+
+
+        if contentHeight < 300 do
+        (
+            contentHeight = 300
+        )
+
+
+        lvTracks.width = leftWidth
+
+        lvTracks.height = contentHeight - 32
+
+
+        lblExpression.pos = [rightX,10]
+
+        lblCurrent.pos = [rightX + 105,10]
+
+
+        edtExpression.pos = [rightX,32]
+
+        edtExpression.width = size.x - rightX - 10
+
+        edtExpression.height = contentHeight - 32
+
+
+        local bottomY = contentHeight + 10
+
+
+        grpTarget.pos = [10,bottomY]
+
+        grpTarget.width = size.x - 20
+
+
+        ddlTransform.pos = [25,bottomY + 20]
+
+
+        chkX.pos = [205,bottomY + 38]
+
+        chkY.pos = [250,bottomY + 38]
+
+        chkZ.pos = [295,bottomY + 38]
+
+
+        btnAdd.pos = [350,bottomY + 28]
+
+        btnApplyExpression.pos = [535,bottomY + 28]
+
+        btnEditPart.pos = [720,bottomY + 28]
+
+        btnSelectNode.pos = [895,bottomY + 28]
+
+        btnRefresh.pos = [1025,bottomY + 28]
+
+
+        lblStatus.pos = [1130,bottomY + 36]
+    )
+
+
+    --------------------------------------------------------
+    -- Transform 切换
+    --------------------------------------------------------
+
+    on ddlTransform selected index do
+    (
+        updateAxisCheckboxState()
+    )
+
+
+    --------------------------------------------------------
+    -- Track Selection
+    --------------------------------------------------------
+
+    on lvTracks SelectedIndexChanged sender args do
+    (
+        local row = getSelectedTrack()
+
+
+        if row != undefined do
+        (
+            updateSelectionInfo row
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Double Click
+    --------------------------------------------------------
+
+    on lvTracks DoubleClick sender args do
+    (
+        local row = getSelectedTrack()
+
+
+        if row != undefined do
+        (
+            updateSelectionInfo row
+
+
+            if modifyScript == undefined then
+            (
+                messageBox "当前变量在这个 Expression 中没有找到。"
+            )
+            else
+            (
+                try (destroyDialog editFloatScriptRollout) catch()
+
+                createDialog editFloatScriptRollout
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- 编辑当前变量
+    --------------------------------------------------------
+
+    on btnEditPart pressed do
+    (
+        local row = getSelectedTrack()
+
+
+        if row == undefined then
+        (
+            messageBox "请先选择一个 Float Script Track。"
+        )
+        else
+        (
+            updateSelectionInfo row
+
+
+            if modifyScript == undefined then
+            (
+                messageBox "当前 Expression 中没有找到选择的变量。"
+            )
+            else
+            (
+                try (destroyDialog editFloatScriptRollout) catch()
+
+                createDialog editFloatScriptRollout
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- 应用完整 Expression
+    --------------------------------------------------------
+
+    on btnApplyExpression pressed do
+    (
+        local row = getSelectedTrack()
+
+
+        if row == undefined then
+        (
+            messageBox "请先选择一个 Float Script Track。"
+        )
+        else
+        (
+            local nodeName = row[1]
+
+            local axisKey = row[5]
+
+            local obj = getNodeByName nodeName
+
+
+            if not isValidNode obj then
+            (
+                messageBox "Dummy object not found."
+            )
+            else
+            (
+                local controller = getDummyFloatController obj axisKey
+
+
+                if controller == undefined then
+                (
+                    messageBox "Controller not found."
+                )
+                else if classOf controller != Float_Script then
+                (
+                    messageBox "Selected Controller is not Float_Script."
+                )
+                else
+                (
+                    local newScript = edtExpression.Text
+
+
+                    try
+                    (
+                        controller.script = newScript
+
+
+                        updatedScript = newScript
+
+                        row[6] = newScript
+
+
+                        selectedScript = nodeName + "|" + axisKey + "|" + newScript
+
+                        modifyScript = findVariableFragment newScript selectedValue
+
+
+                        lblStatus.text = "Expression applied"
+
+
+                        redrawViews()
+
+                        updateAxisCheckboxState()
+                    )
+                    catch
+                    (
+                        local err = getCurrentException() as string
+
+                        messageBox ("Expression 写入失败。\n\n" + err)
+                    )
+                )
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- 选择列表对象
+    --------------------------------------------------------
+
+    on btnSelectNode pressed do
+    (
+        local row = getSelectedTrack()
+
+
+        if row != undefined do
+        (
+            local obj = getNodeByName row[1]
+
+
+            if isValidNode obj do
+            (
+                try (select obj) catch()
+            )
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Refresh
+    --------------------------------------------------------
+
+    on btnRefresh pressed do
+    (
+        refreshTrackList()
+    )
+
+
+    --------------------------------------------------------
+    -- 添加
+    --------------------------------------------------------
+
+    on btnAdd pressed do
+    (
+        local canAdd = true
+
+
+        ----------------------------------------------------
+        -- Selection
+        ----------------------------------------------------
+
+        if selection.count != 1 then
+        (
+            messageBox "请选择一个 Dummy object。"
+
+            canAdd = false
+        )
+
+
+        if canAdd do
+        (
+            if classOf selection[1] != Dummy then
+            (
+                messageBox "选择的对象不是 Dummy。"
+
+                canAdd = false
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Variable
+        ----------------------------------------------------
+
+        if canAdd do
+        (
+            if selectedValue == undefined then
+            (
+                messageBox "请先在 Non-Zero Spinners 中选择一个变量。"
+
+                canAdd = false
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Source
+        ----------------------------------------------------
+
+        if canAdd do
+        (
+            if modifyScript == undefined then
+            (
+                messageBox "请先在左侧选择一个包含当前变量的 Float Script，作为添加来源。"
+
+                canAdd = false
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- Axis
+        ----------------------------------------------------
+
+        if canAdd do
+        (
+            local anyAxis = false
+
+
+            if chkX.checked and chkX.enabled do anyAxis = true
+
+            if chkY.checked and chkY.enabled do anyAxis = true
+
+            if chkZ.checked and chkZ.enabled do anyAxis = true
+
+
+            if not anyAxis then
+            (
+                messageBox "至少选择一个可添加的 X / Y / Z Axis。"
+
+                canAdd = false
+            )
+        )
+
+
+        ----------------------------------------------------
+        -- 执行
+        ----------------------------------------------------
+
+        if canAdd do
+        (
+            local dummyObj = selection[1]
+
+            local addedNodeName = dummyObj.name
+
+            local currentTransformIndex = ddlTransform.selection
+
+            local firstAddedAxisKey = undefined
+
+
+            ------------------------------------------------
+            -- Axis
+            ------------------------------------------------
+
+            local axisIndices = #()
+
+
+            if chkX.checked and chkX.enabled do
+            (
+                append axisIndices 1
+            )
+
+
+            if chkY.checked and chkY.enabled do
+            (
+                append axisIndices 2
+            )
+
+
+            if chkZ.checked and chkZ.enabled do
+            (
+                append axisIndices 3
+            )
+
+
+            ------------------------------------------------
+            -- Count
+            ------------------------------------------------
+
+            local successCount = 0
+
+            local convertedCount = 0
+
+            local existsCount = 0
+
+            local invalidCount = 0
+
+
+            ------------------------------------------------
+            -- Loop
+            ------------------------------------------------
+
+            for axisIndex in axisIndices do
+            (
+                local oldController = getTransformAxisController dummyObj currentTransformIndex axisIndex
+
+
+                if oldController == undefined then
+                (
+                    invalidCount += 1
+                )
+                else
+                (
+                    ------------------------------------------------
+                    -- 已经 Float Script
+                    ------------------------------------------------
+
+                    if classOf oldController == Float_Script then
+                    (
+                        if floatScriptHasVariable oldController.script selectedValue then
+                        (
+                            existsCount += 1
+                        )
+                        else
+                        (
+                            if addVariableToController oldController then
+                            (
+                                successCount += 1
+
+
+                                if firstAddedAxisKey == undefined do
+                                (
+                                    firstAddedAxisKey = getAxisKeyByIndex currentTransformIndex axisIndex
+                                )
+                            )
+                            else
+                            (
+                                invalidCount += 1
+                            )
+                        )
+                    )
+
+
+                    ------------------------------------------------
+                    -- 非 Float Script
+                    ------------------------------------------------
+
+                    else
+                    (
+                        local newController = ensureAxisFloatScript dummyObj currentTransformIndex axisIndex
+
+
+                        if newController == undefined then
+                        (
+                            invalidCount += 1
+                        )
+                        else
+                        (
+                            if classOf newController != Float_Script then
+                            (
+                                invalidCount += 1
+                            )
+                            else
+                            (
+                                if addVariableToController newController then
+                                (
+                                    successCount += 1
+
+                                    convertedCount += 1
+
+
+                                    if firstAddedAxisKey == undefined do
+                                    (
+                                        firstAddedAxisKey = getAxisKeyByIndex currentTransformIndex axisIndex
+                                    )
+                                )
+                                else
+                                (
+                                    ------------------------------------------------
+                                    -- 添加失败恢复旧 Controller
+                                    ------------------------------------------------
+
+                                    try
+                                    (
+                                        setTransformAxisController dummyObj currentTransformIndex axisIndex oldController
+                                    )
+                                    catch()
+
+
+                                    invalidCount += 1
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+
+
+            ----------------------------------------------------
+            -- View
+            ----------------------------------------------------
+
+            redrawViews()
+
+
+            ----------------------------------------------------
+            -- Refresh
+            ----------------------------------------------------
+
+            refreshTrackList()
+
+
+            ----------------------------------------------------
+            -- 自动选择第一条成功添加的轨道
+            ----------------------------------------------------
+
+            if firstAddedAxisKey != undefined do
+            (
+                selectTrackByNodeAndAxis addedNodeName firstAddedAxisKey
+            )
+
+
+            ----------------------------------------------------
+            -- Checkbox
+            ----------------------------------------------------
+
+            updateAxisCheckboxState()
+
+
+            ----------------------------------------------------
+            -- Status
+            ----------------------------------------------------
+
+            lblStatus.text = "Added: " + (successCount as string) + "   Converted: " + (convertedCount as string) + "   Exists: " + (existsCount as string) + "   Failed: " + (invalidCount as string)
+
+
+            ----------------------------------------------------
+            -- Error
+            ----------------------------------------------------
+
+            if invalidCount > 0 do
+            (
+                local msg = (invalidCount as string) + " 个 Axis 添加失败。"
+
+                messageBox msg
+            )
+        )
+    )
+)
+
+
+------------------------------------------------------------
+-- 打开 Float Script Manager
+------------------------------------------------------------
+
 fn displayFloatScriptsOfSelectedDummies varNames =
 (
-	local scriptsList = #() -- 用于存储与选定变量相关的脚本
-	
-	-- 遍历每个变量名
-	for varName in varNames do
-	(
-		-- 遍历场景中的所有Dummy对象
-		for obj in objects where classOf obj == Dummy do
-		(
-			-- 如果Dummy对象包含该变量，处理其控制器脚本
-			if doesDummyHaveVariable obj varName do
-			(
-				local objName = obj.name
-				append scriptsList objName -- 将对象名称添加到列表
-
-				-- 检查位置控制器
-				if isProperty obj #position do
-				(
-					local posController = obj.position.controller
-					if classOf posController == Position_XYZ do
-					(
-						-- 添加每个轴的脚本到列表
-						addScriptToList posController.x_position.controller "x_position" varNames scriptsList objName
-						addScriptToList posController.y_position.controller "y_position" varNames scriptsList objName
-						addScriptToList posController.z_position.controller "z_position" varNames scriptsList objName
-					)
-				)
-
-				-- 检查旋转控制器
-				if isProperty obj #rotation do
-				(
-					local rotController = obj.rotation.controller
-					if classOf rotController == Euler_XYZ do
-					(
-						-- 添加每个轴的脚本到列表
-						addScriptToList rotController.x_rotation.controller "x_rotation" varNames scriptsList objName
-						addScriptToList rotController.y_rotation.controller "y_rotation" varNames scriptsList objName
-						addScriptToList rotController.z_rotation.controller "z_rotation" varNames scriptsList objName
-					)
-				)
-
-				-- 检查缩放控制器
-				if isProperty obj #scale do
-				(
-					local scaleController = obj.scale.controller
-					if classOf scaleController == Scale_XYZ do
-					(
-						-- 添加每个轴的脚本到列表
-						addScriptToList scaleController.x_scale.controller "x_scale" varNames scriptsList objName
-						addScriptToList scaleController.y_scale.controller "y_scale" varNames scriptsList objName
-						addScriptToList scaleController.z_scale.controller "z_scale" varNames scriptsList objName
-					)
-				)
-			)
-		)
-	)
-	-- 创建并显示脚本列表对话框
-	createDialog floatScriptsRollout  style:#(#style_titlebar, #style_resizing, #style_sysmenu) autoLayoutOnResize:true  lockHeight:on 
-	if floatScriptsRollout.lstFloatScripts != undefined do
-	(
-		floatScriptsRollout.lstFloatScripts.items = scriptsList -- 更新列表内容
-	)
-
-)	
+    currentFloatScriptVarNames = varNames
 
 
-
--- Rollout定义: 非零旋钮
-rollout nonZeroSpinnerRollout "Non-Zero Spinners" width:200 height:265
-(
-	button btnGetValues "Get Non-Zero Values" width:180 height:25 -- 获取非零值按钮
-	listBox lstNonZeroValues "Values" width:180 height:10 pos:[10,35] -- 显示非零值的列表框
-	button btnSelectDummies "Select Dummies" width:180 height:25 pos:[10,200] -- 选择Dummy对象的按钮
-		
-	label lblStatus "Status: Ready" -- 显示状态信息的标签
-	label author "作者:黄友为" -- 作者信息标签
-	
-	-- 当点击获取非零值按钮时执行的操作
-	on btnGetValues pressed do
-	(
-		local selectedObj = $Animcraft_Master_GRP -- 指定要检查的对象
-		if isValidNode selectedObj then
-		(
-			lstNonZeroValues.items = getNonZeroSpinnerValues selectedObj -- 获取并显示非零值
-			if lstNonZeroValues.items.count == 0 then
-			(
-				lblStatus.text = "No non-zero values found." -- 显示未找到非零值的信息
-			)
-			else lblStatus.text = "Non-zero values updated." -- 显示非零值更新的信息
-		)
-		else lblStatus.text = "Invalid or no object selected." -- 显示无效或未选择对象的信息
-	)
-
-	-- 当点击选择Dummy对象按钮时执行的操作
-	on btnSelectDummies pressed do
-	(
-		if lstNonZeroValues.selected != undefined then
-		(
-			selectedValue = getVarNameFromItem lstNonZeroValues.selected -- 提取选中的变量名
-			local selectedIndices = lstNonZeroValues.selection
-			if classOf selectedIndices != Array do
-				selectedIndices = #(selectedIndices)  -- 如果只选择了一个项，将其转换为数组
-
-			-- 确保所有选中索引都是有效的（大于0）
-			selectedIndices = for index in selectedIndices where index > 0 collect index
-
-			if selectedIndices.count > 0 then
-			(
-				-- 提取并处理每个选中项对应的变量名
-				local extractedVarNames = for index in selectedIndices collect getVarNameFromItem lstNonZeroValues.items[index]
-				-- 根据变量名选择相关的Dummy对象，并显示其浮点脚本
-				varObj = getDummiesBasedOnVariables extractedVarNames  --获取浮点脚本种含有变量的dummy物体
-				displayFloatScriptsOfSelectedDummies extractedVarNames
-			)
-			else messagebox "Please select an item from the list."  -- 如果没有选中任何项，则显示提示信息      
-		)
-		else messagebox "No item is selected." -- 如果没有选中任何项，则显示提示信息
-	)
-	
+    try (destroyDialog floatScriptsRollout) catch()
 
 
+    createDialog floatScriptsRollout style:#(#style_titlebar, #style_resizing, #style_sysmenu) autoLayoutOnResize:false
 )
 
--- 创建并显示非零旋钮对话框
-createdialog nonZeroSpinnerRollout   
+
+------------------------------------------------------------
+-- Non-Zero Spinners
+------------------------------------------------------------
+
+rollout nonZeroSpinnerRollout "Non-Zero Spinners" width:220 height:285
+(
+    button btnGetValues "Get Non-Zero Values" width:200 height:25 pos:[10,10]
 
 
-	
-	
+    listBox lstNonZeroValues "Values" width:200 height:10 pos:[10,40]
+
+
+    button btnSelectDummies "Select Dummies / Float Scripts" width:200 height:30 pos:[10,215]
+
+
+    label lblStatus "Status: Ready" pos:[10,250] width:200
+
+
+    label author "作者: 黄友为" pos:[10,268] width:200
+
+
+    --------------------------------------------------------
+    -- Get Values
+    --------------------------------------------------------
+
+    on btnGetValues pressed do
+    (
+        local masterObj = $Animcraft_Master_GRP
+
+
+        if isValidNode masterObj then
+        (
+            lstNonZeroValues.items = getNonZeroSpinnerValues masterObj
+
+
+            if lstNonZeroValues.items.count == 0 then
+            (
+                lblStatus.text = "No non-zero values found."
+            )
+            else
+            (
+                lblStatus.text = "Non-zero values updated."
+            )
+        )
+        else
+        (
+            lblStatus.text = "Animcraft_Master_GRP not found."
+        )
+    )
+
+
+    --------------------------------------------------------
+    -- Select Dummies / Float Scripts
+    --------------------------------------------------------
+
+    on btnSelectDummies pressed do
+    (
+        local selectedIndex = lstNonZeroValues.selection
+
+
+        if selectedIndex == undefined or selectedIndex == 0 then
+        (
+            messageBox "Please select an item from the list."
+        )
+        else
+        (
+            selectedValue = getVarNameFromItem lstNonZeroValues.items[selectedIndex]
+
+
+            local extractedVarNames = #(selectedValue)
+
+
+            local varObj = getDummiesBasedOnVariables extractedVarNames
+
+
+            if varObj.count > 0 do
+            (
+                try (select varObj) catch()
+            )
+
+
+            displayFloatScriptsOfSelectedDummies extractedVarNames
+        )
+    )
+)
+
+
+------------------------------------------------------------
+-- 启动
+------------------------------------------------------------
+
+createDialog nonZeroSpinnerRollout
