@@ -1,11 +1,10 @@
 /* ============================================================
-   GameHelper / AniTools
-   ============================================================ */
-
+GameHelper / AniTools
+============================================================ */
 
 /* ============================================================
-   全局变量
-   ============================================================ */
+全局变量
+============================================================ */
 
 global CGH_MainFolder
 global CGH_ToolRegistry
@@ -29,10 +28,9 @@ global encodedString
 global decodedImage
 global imageRollout
 
-
 /* ============================================================
-   获取当前脚本路径
-   ============================================================ */
+获取当前脚本路径
+============================================================ */
 
 fn CGH_GetCurrentScriptFolder =
 (
@@ -68,10 +66,9 @@ fn CGH_GetCurrentScriptFolder =
 	sourceFolder
 )
 
-
 /* ============================================================
-   初始化 GameHelper
-   ============================================================ */
+初始化 GameHelper
+============================================================ */
 
 fn CGH_InitializeAniTools =
 (
@@ -95,7 +92,7 @@ fn CGH_InitializeAniTools =
 		return false
 	)
 
-	toolRegistryPath = pathConfig.appendPath CGH_MainFolder "modules\CGH_ToolRegistry.ms"
+	toolRegistryPath = pathConfig.appendPath CGH_MainFolder @"modules\CGH_ToolRegistry.ms"
 
 	format "\n-------------------------------------\n"
 	format "GameHelper Root: %\n" CGH_MainFolder
@@ -166,10 +163,9 @@ fn CGH_InitializeAniTools =
 	initSuccess
 )
 
-
 /* ============================================================
-   关闭旧 AniTools
-   ============================================================ */
+关闭旧 AniTools
+============================================================ */
 
 try
 (
@@ -188,17 +184,82 @@ catch
 	format "Destroy AniTools failed: %\n" (getCurrentException())
 )
 
+/* ============================================================
+关闭旧 Image Viewer
+============================================================ */
+
+try
+(
+	if ::imageRollout != undefined then
+	(
+		DestroyDialog ::imageRollout
+	)
+)
+catch
+(
+)
+
+try
+(
+	if ::decodedImage != undefined then
+	(
+		::decodedImage.Dispose()
+		::decodedImage = undefined
+	)
+)
+catch
+(
+	::decodedImage = undefined
+)
 
 /* ============================================================
-   初始化模块
-   ============================================================ */
+初始化模块
+============================================================ */
 
 CGH_AniToolsInitOK = CGH_InitializeAniTools()
 
+/* ============================================================
+作者图片窗口
+============================================================ */
+
+rollout imageRollout "Image Viewer" width:600 height:600
+(
+	dotNetControl picture "System.Windows.Forms.PictureBox" pos:[0,0] width:600 height:600
+
+	on imageRollout open do
+	(
+		picture.SizeMode = (dotNetClass "System.Windows.Forms.PictureBoxSizeMode").StretchImage
+		picture.Image = ::decodedImage
+	)
+
+	on imageRollout close do
+	(
+		try
+		(
+			picture.Image = undefined
+		)
+		catch
+		(
+		)
+
+		try
+		(
+			if ::decodedImage != undefined then
+			(
+				::decodedImage.Dispose()
+				::decodedImage = undefined
+			)
+		)
+		catch
+		(
+			::decodedImage = undefined
+		)
+	)
+)
 
 /* ============================================================
-   AniTools 主界面
-   ============================================================ */
+AniTools 主界面
+============================================================ */
 
 rollout AniTools "动作工具"
 (
@@ -444,7 +505,7 @@ rollout AniTools "动作工具"
 
 	group "绑定工具"
 	(
-		button btObjLayer "调整层级" height:21 width:93 across:2 tooltip:"把不同属性的物体放入不同的层级,左键普通分层，右键表情绑定分层"
+		button btObjLayer "调整层级" height:21 width:93 across:2 tooltip:"把不同属性的物体放入不同的层级"
 
 		on btObjLayer pressed do
 		(
@@ -605,39 +666,84 @@ rollout AniTools "动作工具"
 
 		on btnShowImage pressed do
 		(
+			local memoryStream = undefined
+			local sourceBitmap = undefined
+
 			try
 			(
-				local byteArray = (dotNetClass "System.Convert").FromBase64String encodedString
-				local memoryStream = dotNetObject "System.IO.MemoryStream" byteArray
-
-				decodedImage = dotNetObject "System.Drawing.Bitmap" memoryStream
+				try
+				(
+					DestroyDialog ::imageRollout
+				)
+				catch
+				(
+				)
 
 				try
 				(
-					if ::imageRollout != undefined then
+					if ::decodedImage != undefined then
 					(
-						DestroyDialog ::imageRollout
+						::decodedImage.Dispose()
+						::decodedImage = undefined
+					)
+				)
+				catch
+				(
+					::decodedImage = undefined
+				)
+
+				local byteArray = (dotNetClass "System.Convert").FromBase64String encodedString
+
+				memoryStream = dotNetObject "System.IO.MemoryStream" byteArray
+				sourceBitmap = dotNetObject "System.Drawing.Bitmap" memoryStream
+
+				decodedImage = dotNetObject "System.Drawing.Bitmap" sourceBitmap
+
+				sourceBitmap.Dispose()
+				sourceBitmap = undefined
+
+				memoryStream.Dispose()
+				memoryStream = undefined
+
+				CreateDialog ::imageRollout
+			)
+			catch
+			(
+				try
+				(
+					if sourceBitmap != undefined then
+					(
+						sourceBitmap.Dispose()
 					)
 				)
 				catch
 				(
 				)
 
-				rollout imageRollout "Image Viewer" width:600 height:600
+				try
 				(
-					dotNetControl picture "System.Windows.Forms.PictureBox" pos:[0,0] width:600 height:600
-
-					on imageRollout open do
+					if memoryStream != undefined then
 					(
-						picture.SizeMode = (dotNetClass "System.Windows.Forms.PictureBoxSizeMode").StretchImage
-						picture.Image = decodedImage
+						memoryStream.Dispose()
 					)
 				)
+				catch
+				(
+				)
 
-				CreateDialog imageRollout
-			)
-			catch
-			(
+				try
+				(
+					if ::decodedImage != undefined then
+					(
+						::decodedImage.Dispose()
+						::decodedImage = undefined
+					)
+				)
+				catch
+				(
+					::decodedImage = undefined
+				)
+
 				messageBox
 				(
 					"作者图片加载失败。\n\n" +
@@ -670,10 +776,9 @@ rollout AniTools "动作工具"
 	)
 )
 
-
 /* ============================================================
-   创建 AniTools
-   ============================================================ */
+创建 AniTools
+============================================================ */
 
 if CGH_AniToolsInitOK then
 (
