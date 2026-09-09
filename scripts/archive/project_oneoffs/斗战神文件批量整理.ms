@@ -38,6 +38,9 @@ struct FileProcessor
     cleanedBackupCount = 0,
     cancelled = false,
     fatalError = "",
+    progressControl = undefined,
+    progressLabel = undefined,
+    currentFileLabel = undefined,
 
     fn JoinPath dirPath fileName =
     (
@@ -75,6 +78,20 @@ struct FileProcessor
             close logStream
             logStream = undefined
         )
+    ),
+
+    fn UpdateRolloutProgress completedCount totalCount statusText =
+    (
+        local percent = 0
+        if totalCount > 0 do
+            percent = (100.0 * completedCount / totalCount) as integer
+
+        if progressControl != undefined do progressControl.value = percent
+        if progressLabel != undefined do
+            progressLabel.text = ("进度: " + (percent as string) + "%  (" + (completedCount as string) + "/" + (totalCount as string) + ")")
+        if currentFileLabel != undefined do currentFileLabel.text = statusText
+
+        try((dotNetClass "System.Windows.Forms.Application").DoEvents()) catch()
     ),
 
     fn AddWarning result message =
@@ -424,6 +441,27 @@ struct FileProcessor
         WriteLog ""
     ),
 
+    fn PrintFailedFilePaths =
+    (
+        local failedResults = for result in results where not result.success collect result
+
+        format "\n============================================================\n"
+        format "失败文件路径汇总（共 % 个）\n" failedResults.count
+        format "============================================================\n"
+
+        if failedResults.count == 0 then
+        (
+            format "无失败文件。\n"
+        )
+        else
+        (
+            for i = 1 to failedResults.count do
+                format "%、%\n" i failedResults[i].filePath
+        )
+
+        format "============================================================\n\n"
+    ),
+
     fn GetSummaryText =
     (
         local successCount = 0
@@ -478,6 +516,7 @@ struct FileProcessor
             totalFileCount = maxFiles.count
             WriteLog ("扫描到 MAX 文件: " + (totalFileCount as string))
             WriteLog ""
+            UpdateRolloutProgress 0 totalFileCount "准备开始..."
 
             if totalFileCount > 0 do
             (
@@ -493,10 +532,12 @@ struct FileProcessor
                     )
                     else
                     (
+                        UpdateRolloutProgress (i - 1) totalFileCount ("正在处理: " + (filenameFromPath maxFiles[i]))
                         WriteLog ("[" + (i as string) + "/" + (totalFileCount as string) + "] 开始处理: " + maxFiles[i])
                         local result = ProcessMaxFile maxFiles[i]
                         append results result
                         WriteFileResult result
+                        UpdateRolloutProgress i totalFileCount ("已完成: " + (filenameFromPath maxFiles[i]))
                     )
                 )
 
@@ -507,10 +548,17 @@ struct FileProcessor
         (
             fatalError = getCurrentException() as string
             WriteLog ("[批处理错误] " + fatalError)
+            UpdateRolloutProgress results.count totalFileCount "批处理发生错误"
         )
 
         if progressOpened do try(progressEnd()) catch()
-        if not cancelled and fatalError == "" do CleanupSuccessfulBackups()
+        if not cancelled and fatalError == "" do
+        (
+            UpdateRolloutProgress totalFileCount totalFileCount "正在清理成功文件的备份..."
+            CleanupSuccessfulBackups()
+            UpdateRolloutProgress totalFileCount totalFileCount "处理完成"
+        )
+        if cancelled do UpdateRolloutProgress results.count totalFileCount "用户已取消"
         WriteLog ""
         WriteLog (GetSummaryText())
         CloseLog()
@@ -518,11 +566,14 @@ struct FileProcessor
     )
 )
 
-rollout ModelStandardRollout "模型规范整理 v2.3"
+rollout ModelStandardRollout "模型规范整理 v2.5"
 (
     edittext edtPath "项目路径:" fieldWidth:200 height:30 labelOnTop:true across:2
     button btnBrowse "浏览..." width:60 height:30 offset:[40,18]
     button btnProcess "开始处理" width:300 height:40
+    label lblProgress "进度: 0%  (0/0)" width:300 align:#left
+    progressbar pgbProgress "" value:0 width:300 height:16 color:(color 70 160 220)
+    label lblCurrentFile "等待开始" width:300 align:#left
 
     on btnBrowse pressed do
     (
@@ -543,7 +594,16 @@ rollout ModelStandardRollout "模型规范整理 v2.3"
             if maxFileName != "" do originalScenePath = maxFilePath + maxFileName
 
             btnProcess.enabled = false
-            local processor = FileProcessor()
+            btnBrowse.enabled = false
+            edtPath.enabled = false
+            pgbProgress.value = 0
+            lblProgress.text = "进度: 0%  (0/0)"
+            lblCurrentFile.text = "正在扫描文件..."
+
+            local processor = FileProcessor \
+                progressControl:pgbProgress \
+                progressLabel:lblProgress \
+                currentFileLabel:lblCurrentFile
             local uiError = ""
 
             try
@@ -574,7 +634,10 @@ rollout ModelStandardRollout "模型规范整理 v2.3"
             catch()
 
             btnProcess.enabled = true
+            btnBrowse.enabled = true
+            edtPath.enabled = true
             redrawViews()
+            processor.PrintFailedFilePaths()
 
             if uiError != "" then
                 messageBox ("批处理意外终止:\n" + uiError + "\n\n已完成文件请查看日志。") title:"模型规范整理"
@@ -584,4 +647,4 @@ rollout ModelStandardRollout "模型规范整理 v2.3"
     )
 )
 
-createDialog ModelStandardRollout 320 115
+createDialog ModelStandardRollout 320 175
