@@ -1,5 +1,5 @@
 /* ============================================================
-    Animation Key Reducer V0.58 - Biped and Bone Alignment
+    Animation Key Reducer V0.67 - Candidate Double-Click and Sequential Navigation
 
     目标：
     1. Biped 全身统一关键帧时间轴
@@ -7,6 +7,10 @@
     3. 保留首尾帧 / Pose Lock / 自动关键 Pose
     4. 可选保护脚底接触变化
     5. Master Frame 生成后，再删除各 Controller 的非 Master Key
+    6. 首次精简使用原始高效选帧算法；二次精简由独立按钮执行，只删除现有关键时间
+    7. 二次精简临时放宽误差参数，完成或报错后恢复用户原设置
+    8. 二次精简以每次点击时的当前唯一关键时间数为基准，自适应保留约 75%
+    9. 双击候选立即跳转；按钮从当前选中项开始按列表顺序循环跳转
 
     说明：
     - 这一版优先针对 Biped。
@@ -18,6 +22,8 @@
 
 global AKR_Core
 global AKR_CandidateFrames = #()
+global AKR_CandidateCycleIndex = 1
+global AKR_CandidateRefreshingList = false
 global AKR_LockedFrames = #()
 global AKR_MasterFrames = #()
 global AKR_LastAnalysis = undefined
@@ -30,6 +36,12 @@ global AKR_AddFailCount = 0
 global AKR_DeleteFailCount = 0
 global AKR_AddSuccessCount = 0
 global AKR_DeleteSuccessCount = 0
+global AKR_RepeatSourceTimesCount = 0
+global AKR_RepeatTargetTimesCount = 0
+global AKR_RepeatResultTimesCount = 0
+global AKR_RepeatAttemptCount = 0
+global AKR_RepeatTargetReached = false
+global AKR_RepeatProtectedTimesCount = 0
 
 
 /* ============================================================
@@ -831,6 +843,49 @@ struct AKR_CoreStruct
         masterFrames
     ),
 
+    fn appendNearestExistingProtection existingFrames targetFrame protectedFrames =
+    (
+        local previousFrame = undefined
+        local nextFrame = undefined
+
+        for frame in existingFrames do
+        (
+            if frame <= targetFrame then previousFrame = frame
+            if nextFrame == undefined and frame >= targetFrame then nextFrame = frame
+        )
+
+        if previousFrame != undefined then appendFrameUnique protectedFrames previousFrame
+        if nextFrame != undefined then appendFrameUnique protectedFrames nextFrame
+
+        true
+    ),
+
+    fn buildMasterFramesFromExisting analysisData existingFrames startFrame endFrame lockedFrames lockRange localTol rotTol trajTol minSpacing mergeRange protectFeet safety =
+    (
+        local footFrames = #()
+
+        if protectFeet then
+        (
+            footFrames = collectFootContactFrames analysisData trajTol
+        )
+
+        local requestedMandatory = collectMandatoryFrames startFrame endFrame lockedFrames lockRange footFrames
+        local mandatory = #()
+        local masterFrames = sortUniqueFrames existingFrames
+
+        -- 二次精简只允许删除当前已有关键时间，不在新的时间位置补 Key。
+        -- 脚接触与 Pose Lock 若落在空帧，则保护其左右相邻的现有 Key。
+        for frame in requestedMandatory do
+        (
+            appendNearestExistingProtection masterFrames frame mandatory
+        )
+
+        sort mandatory
+        AKR_RepeatProtectedTimesCount = mandatory.count
+
+        cleanupMasterFrames analysisData masterFrames mandatory localTol rotTol trajTol safety mergeRange minSpacing
+    ),
+
 
     /* --------------------------------------------------------
         Controller 收集
@@ -1076,7 +1131,65 @@ struct AKR_CoreStruct
         result
     ),
 
-    fn addKeyAtFrame group frame =
+    fn hasKeyAtFrame group frame =
+    (
+        local count = getControllerKeyCount group
+
+        for i = 1 to count do
+        (
+            local keyFrame = getKeyFrame group i
+            if keyFrame != undefined and keyFrame == frame then return true
+        )
+
+        false
+    ),
+
+    fn getGroupKeyFrames group startFrame endFrame =
+    (
+        local frames = #()
+        local count = getControllerKeyCount group
+
+        for i = 1 to count do
+        (
+            local keyFrame = getKeyFrame group i
+
+            if keyFrame != undefined and keyFrame >= startFrame and keyFrame <= endFrame then
+            (
+                if (findItem frames keyFrame) == 0 then append frames keyFrame
+            )
+        )
+
+        sort frames
+        frames
+    ),
+
+    fn groupMatchesMasterFrames group masterFrames startFrame endFrame =
+    (
+        local keyFrames = getGroupKeyFrames group startFrame endFrame
+
+        if keyFrames.count != masterFrames.count then return false
+
+        for i = 1 to masterFrames.count do
+        (
+            if keyFrames[i] != masterFrames[i] then return false
+        )
+
+        true
+    ),
+
+    fn allGroupsMatchMasterFrames controllerGroups masterFrames startFrame endFrame =
+    (
+        if controllerGroups == undefined or controllerGroups.count == 0 then return false
+
+        for group in controllerGroups do
+        (
+            if not (groupMatchesMasterFrames group masterFrames startFrame endFrame) then return false
+        )
+
+        true
+    ),
+
+    fn createKeyAtFrame group frame =
     (
         local ok = false
 
@@ -1109,11 +1222,31 @@ struct AKR_CoreStruct
         ok
     ),
 
+    fn addKeyAtFrame group frame =
+    (
+        -- 单帧恢复使用：避免在已有 Biped TCB Key 上重复调用 addNewKey。
+        if hasKeyAtFrame group frame then return true
+        createKeyAtFrame group frame
+    ),
+
     fn ensureMasterKeys group masterFrames =
     (
+        -- 每个 Controller 只读取一次 Key 时间，避免逐帧重复遍历造成平方级变慢。
+        local existingFrames = #()
+        local count = getControllerKeyCount group
+
+        for i = 1 to count do
+        (
+            local keyFrame = getKeyFrame group i
+            if keyFrame != undefined and (findItem existingFrames keyFrame) == 0 then append existingFrames keyFrame
+        )
+
         for f in masterFrames do
         (
-            addKeyAtFrame group f
+            if (findItem existingFrames f) == 0 then
+            (
+                if createKeyAtFrame group f then append existingFrames f
+            )
         )
 
         true
@@ -1409,7 +1542,7 @@ AKR_Core = AKR_CoreStruct()
 
 
 /* ============================================================
-    UI V0.58
+    UI V0.67
 ============================================================ */
 
 try
@@ -1420,7 +1553,7 @@ catch
 (
 )
 
-rollout AKR_Rollout "动画关键帧精简 V0.58"
+rollout AKR_Rollout "动画关键帧精简 V0.67"
 (
     group "处理范围"
     (
@@ -1487,7 +1620,9 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
     group "操作"
     (
         button btnAnalyze "分析 Master Frames" width:150 height:30 across:2
-        button btnReduce "执行精简" width:150 height:30
+        button btnReduce "执行首次精简" width:150 height:30
+
+        button btnReduceAgain "二次精简：保留当前帧数的 75%" width:310 height:28
 
         button btnRestoreCurrent "恢复当前帧原始 Pose" width:310 height:28
         label lblRestoreStatus "恢复缓存：请先执行精简" width:315 align:#left
@@ -1540,7 +1675,9 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
 
     fn refreshPoseLists =
     (
+        AKR_CandidateRefreshingList = true
         lstCandidates.items = framesToStrings AKR_CandidateFrames
+        AKR_CandidateRefreshingList = false
         lstLocked.items = framesToStrings AKR_LockedFrames
 
         lblCandidateCount.text = "自动候选：" + (AKR_CandidateFrames.count as string)
@@ -1594,12 +1731,87 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
         AKR_Core.analyzeNodes processingNodes startFrame endFrame spnLocalPos.value spnRotation.value spnTrajectory.value
     )
 
-    fn buildCurrentMasterFrames analysisData =
+    fn buildCurrentMasterFrames analysisData controllerGroups repeatOnly =
     (
         local startFrame = animationRange.start.frame as integer
         local endFrame = animationRange.end.frame as integer
 
-        AKR_Core.buildMasterFrames analysisData startFrame endFrame AKR_LockedFrames spnLockRange.value spnLocalPos.value spnRotation.value spnTrajectory.value spnMinMasterSpacing.value spnMergeRange.value chkProtectFeet.checked spnSafety.value
+        if repeatOnly then
+        (
+            local existingFrames = AKR_Core.getUniqueKeyTimes controllerGroups startFrame endFrame
+
+            if existingFrames.count > 0 then
+            (
+                local targetCount = (ceil ((existingFrames.count as float) * 0.75)) as integer
+                if existingFrames.count >= 2 then targetCount = amax 2 targetCount
+
+                AKR_RepeatSourceTimesCount = existingFrames.count
+                AKR_RepeatTargetTimesCount = targetCount
+                AKR_RepeatAttemptCount = 1
+
+                local localPosCap = 1000.0
+                local rotationCap = 180.0
+                local trajectoryCap = 1000.0
+                local safetyCap = 4.0
+
+                local masterFrames = AKR_Core.buildMasterFramesFromExisting analysisData existingFrames startFrame endFrame AKR_LockedFrames spnLockRange.value spnLocalPos.value spnRotation.value spnTrajectory.value spnMinMasterSpacing.value spnMergeRange.value chkProtectFeet.checked spnSafety.value
+                local continueSearch = true
+
+                -- 这里只重复计算候选 Master Frames，不修改场景动画。
+                -- 达到当前关键时间数量的约 75% 后，才由 executeReduction 真正执行一次 Key 删除。
+                while continueSearch and masterFrames.count > targetCount and AKR_RepeatAttemptCount < 12 do
+                (
+                    local newLocalPos = amin localPosCap (spnLocalPos.value * 1.75)
+                    local newRotation = amin rotationCap (spnRotation.value * 1.75)
+                    local newTrajectory = amin trajectoryCap (spnTrajectory.value * 1.75)
+                    local newSafety = amin safetyCap (spnSafety.value * 1.35)
+
+                    local valuesChanged = (newLocalPos > spnLocalPos.value) or (newRotation > spnRotation.value) or (newTrajectory > spnTrajectory.value) or (newSafety > spnSafety.value)
+
+                    if valuesChanged then
+                    (
+                        spnLocalPos.value = newLocalPos
+                        spnRotation.value = newRotation
+                        spnTrajectory.value = newTrajectory
+                        spnSafety.value = newSafety
+
+                        AKR_RepeatAttemptCount += 1
+                        masterFrames = AKR_Core.buildMasterFramesFromExisting analysisData existingFrames startFrame endFrame AKR_LockedFrames spnLockRange.value spnLocalPos.value spnRotation.value spnTrajectory.value spnMinMasterSpacing.value spnMergeRange.value chkProtectFeet.checked spnSafety.value
+                    )
+                    else
+                    (
+                        continueSearch = false
+                    )
+                )
+
+                AKR_RepeatResultTimesCount = masterFrames.count
+                AKR_RepeatTargetReached = masterFrames.count <= targetCount
+
+                masterFrames
+            )
+            else
+            (
+                AKR_RepeatSourceTimesCount = 0
+                AKR_RepeatTargetTimesCount = 0
+                AKR_RepeatResultTimesCount = 0
+                AKR_RepeatAttemptCount = 0
+                AKR_RepeatTargetReached = false
+                AKR_RepeatProtectedTimesCount = 0
+                #()
+            )
+        )
+        else
+        (
+            AKR_RepeatSourceTimesCount = 0
+            AKR_RepeatTargetTimesCount = 0
+            AKR_RepeatResultTimesCount = 0
+            AKR_RepeatAttemptCount = 0
+            AKR_RepeatTargetReached = false
+            AKR_RepeatProtectedTimesCount = 0
+
+            -- 首次精简固定使用 V0.58 的原始选帧流程，不再自动切换保守模式。
+            AKR_Core.buildMasterFrames analysisData startFrame endFrame AKR_LockedFrames spnLockRange.value spnLocalPos.value spnRotation.value spnTrajectory.value spnMinMasterSpacing.value spnMergeRange.value chkProtectFeet.checked spnSafety.value
+        )
     )
 
 
@@ -1622,15 +1834,76 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
                 AKR_CandidateFrames = AKR_Core.detectPoseCandidates analysisData spnSensitivity.value spnCandidateSpacing.value
 
                 refreshPoseLists()
+
+                -- 新候选列表从第一项开始循环。
+                AKR_CandidateRefreshingList = true
+                try
+                (
+                    lstCandidates.selection = 0
+                )
+                catch
+                (
+                )
+                AKR_CandidateRefreshingList = false
+                AKR_CandidateCycleIndex = 1
             )
+        )
+    )
+
+    on lstCandidates selected index do
+    (
+        if not AKR_CandidateRefreshingList and index > 0 then
+        (
+            -- 单击列表只设置按钮循环的起点，不立即跳时间轴。
+            AKR_CandidateCycleIndex = index
+        )
+    )
+
+    on lstCandidates doubleClicked index do
+    (
+        -- 双击列表项立即跳到该候选帧。
+        if index > 0 and index <= AKR_CandidateFrames.count then
+        (
+            sliderTime = AKR_CandidateFrames[index]
+            AKR_CandidateCycleIndex = index
         )
     )
 
     on btnGotoCandidate pressed do
     (
-        local frame = getSelectedCandidateFrame()
+        if AKR_CandidateFrames.count > 0 then
+        (
+            if AKR_CandidateCycleIndex < 1 or AKR_CandidateCycleIndex > AKR_CandidateFrames.count then
+            (
+                local selectedIndex = lstCandidates.selection
 
-        if frame != undefined then sliderTime = frame
+                if selectedIndex > 0 and selectedIndex <= AKR_CandidateFrames.count then
+                    AKR_CandidateCycleIndex = selectedIndex
+                else
+                    AKR_CandidateCycleIndex = 1
+            )
+
+            local jumpIndex = AKR_CandidateCycleIndex
+
+            -- 高亮跟随按钮跳转，但不把程序设置 selection 当成新的手动起点。
+            AKR_CandidateRefreshingList = true
+            try
+            (
+                lstCandidates.selection = jumpIndex
+            )
+            catch
+            (
+            )
+            AKR_CandidateRefreshingList = false
+
+            sliderTime = AKR_CandidateFrames[jumpIndex]
+            AKR_CandidateCycleIndex = jumpIndex + 1
+
+            if AKR_CandidateCycleIndex > AKR_CandidateFrames.count then
+            (
+                AKR_CandidateCycleIndex = 1
+            )
+        )
     )
 
     on btnAddCandidate pressed do
@@ -1909,7 +2182,7 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
             if AKR_LastAnalysis != undefined then
             (
                 AKR_LastGroups = AKR_Core.buildControllerGroups AKR_LastAnalysis
-                AKR_MasterFrames = buildCurrentMasterFrames AKR_LastAnalysis
+                AKR_MasterFrames = buildCurrentMasterFrames AKR_LastAnalysis AKR_LastGroups false
 
                 local originalKeys = AKR_Core.getOriginalKeyCount AKR_LastGroups
                 local originalTimes = AKR_Core.getUniqueKeyTimes AKR_LastGroups startFrame endFrame
@@ -1935,7 +2208,7 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
                 lblValidation.text = "整体校验：等待执行"
 
                 format "========================================\n"
-                format "Animation Key Reducer V0.58 - Analyze\n"
+                format "Animation Key Reducer V0.67 - Analyze\n"
                 format "Nodes: %\n" AKR_LastAnalysis.count
                 format "Controllers: %\n" AKR_LastGroups.count
                 format "Original Unique Times: %\n" originalTimes.count
@@ -1950,7 +2223,7 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
         执行
     -------------------------------------------------------- */
 
-    on btnReduce pressed do
+    fn executeReduction repeatOnly =
     (
         if selection.count == 0 then
         (
@@ -1966,16 +2239,21 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
             if analysisData != undefined then
             (
                 local controllerGroups = AKR_Core.buildControllerGroups analysisData
-                local masterFrames = buildCurrentMasterFrames analysisData
+                local masterFrames = buildCurrentMasterFrames analysisData controllerGroups repeatOnly
 
                 if controllerGroups.count == 0 then
                 (
                     messageBox "没有找到可处理的动画 Controller。" title:"Animation Key Reducer"
                 )
+                else if masterFrames.count == 0 then
+                (
+                    messageBox "二次精简没有找到可删除的现有关键时间。" title:"Animation Key Reducer"
+                )
                 else
                 (
                     local originalKeys = AKR_Core.getOriginalKeyCount controllerGroups
                     local originalTimes = AKR_Core.getUniqueKeyTimes controllerGroups startFrame endFrame
+                    local alreadyAligned = AKR_Core.allGroupsMatchMasterFrames controllerGroups masterFrames startFrame endFrame
                     local processSuccess = true
 
                     -- 单独保存精简前缓存。之后再点“分析”不会覆盖手动恢复所需数据。
@@ -1984,22 +2262,34 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
                     AKR_RestoreOriginalKeys = originalKeys
                     AKR_RestoreOriginalTimesCount = originalTimes.count
 
-                    undo "Animation Key Reducer V0.58" on
+                    if alreadyAligned then
                     (
-                        disableSceneRedraw()
-
-                        try
+                        -- 所有 Controller 已经只包含同一套 Master Frame 时直接跳过，
+                        -- 防止相同参数重复执行时再次触碰 Biped TCB Key。
+                        AKR_AddFailCount = 0
+                        AKR_DeleteFailCount = 0
+                        AKR_AddSuccessCount = 0
+                        AKR_DeleteSuccessCount = 0
+                    )
+                    else
+                    (
+                        undo "Animation Key Reducer V0.67" on
                         (
-                            AKR_Core.reduceControllerGroups controllerGroups masterFrames startFrame endFrame
-                        )
-                        catch
-                        (
-                            processSuccess = false
-                            messageBox (getCurrentException()) title:"Animation Key Reducer Error"
-                        )
+                            disableSceneRedraw()
 
-                        enableSceneRedraw()
-                        completeRedraw()
+                            try
+                            (
+                                AKR_Core.reduceControllerGroups controllerGroups masterFrames startFrame endFrame
+                            )
+                            catch
+                            (
+                                processSuccess = false
+                                messageBox (getCurrentException()) title:"Animation Key Reducer Error"
+                            )
+
+                            enableSceneRedraw()
+                            completeRedraw()
+                        )
                     )
 
                     if processSuccess then
@@ -2048,11 +2338,25 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
 
                         lblOriginalTimes.text = "原始关键时间：" + (originalTimes.count as string)
                         lblFinalTimes.text = "精简关键时间：" + (finalTimes.count as string)
-                        lblTimeReduction.text = "时间轴精简：" + (formattedPrint timeReduction format:"3.1f") + "%"
+                        if repeatOnly then
+                        (
+                            lblTimeReduction.text = "时间轴精简：" + (formattedPrint timeReduction format:"3.1f") + "% / 目标 ≤ " + (AKR_RepeatTargetTimesCount as string) + " / 保护 " + (AKR_RepeatProtectedTimesCount as string) + " / 尝试 " + (AKR_RepeatAttemptCount as string)
+                        )
+                        else
+                        (
+                            lblTimeReduction.text = "时间轴精简：" + (formattedPrint timeReduction format:"3.1f") + "%"
+                        )
 
                         lblMasterCount.text = "Master Frames：" + (masterFrames.count as string)
                         lblMasterPreview.text = "帧：" + masterPreviewText masterFrames
-                        lblKeyOps.text = "Key操作：Add " + (AKR_AddSuccessCount as string) + " / Del " + (AKR_DeleteSuccessCount as string) + " / Fail " + ((AKR_AddFailCount + AKR_DeleteFailCount) as string)
+                        if alreadyAligned then
+                        (
+                            lblKeyOps.text = "Key操作：无需处理（已与 Master Frames 对齐）"
+                        )
+                        else
+                        (
+                            lblKeyOps.text = "Key操作：Add " + (AKR_AddSuccessCount as string) + " / Del " + (AKR_DeleteSuccessCount as string) + " / Fail " + ((AKR_AddFailCount + AKR_DeleteFailCount) as string)
+                        )
 
                         lblTrajectoryError.text = "最大轨迹误差：" + (formattedPrint maxTrajectoryError format:"3.4f")
                         lblRotationError.text = "最大旋转误差：" + (formattedPrint maxRotationError format:"3.4f") + " 度"
@@ -2082,8 +2386,21 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
                             )
                         )
 
+                        if repeatOnly and not AKR_RepeatTargetReached then
+                        (
+                            if AKR_RepeatProtectedTimesCount >= AKR_RepeatTargetTimesCount then
+                            (
+                                lblValidation.text = lblValidation.text + " / 未达 75% 目标（硬保护帧过多）"
+                            )
+                            else
+                            (
+                                lblValidation.text = lblValidation.text + " / 未达 75% 目标（已到强力参数上限）"
+                            )
+                        )
+
                         format "========================================\n"
-                        format "Animation Key Reducer V0.58\n"
+                        format "Animation Key Reducer V0.67\n"
+                        format "Mode: %\n" (if repeatOnly then "Repeat Delete-Only" else "First Reduction")
                         format "Original Keys: %\n" originalKeys
                         format "Final Keys: %\n" finalKeys
                         format "Key Reduction: %\n" ((formattedPrint keyReduction format:"3.1f") + "%")
@@ -2096,6 +2413,12 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
                         format "Max Trajectory Error: %\n" maxTrajectoryError
                         format "Max Rotation Error: %\n" maxRotationError
                         format "Worst Score: %\n" worstScore
+
+                        if repeatOnly then
+                        (
+                            format "Repeat Target - Source Times: %, Target Times: %, Candidate Times: %, Protected Times: %, Attempts: %, Reached: %\n" AKR_RepeatSourceTimesCount AKR_RepeatTargetTimesCount AKR_RepeatResultTimesCount AKR_RepeatProtectedTimesCount AKR_RepeatAttemptCount AKR_RepeatTargetReached
+                            format "Repeat Final Temporary Params - LocalPos: %, Rotation: %, Trajectory: %, Safety: %\n" spnLocalPos.value spnRotation.value spnTrajectory.value spnSafety.value
+                        )
 
                         if worstNode != undefined then
                         (
@@ -2110,10 +2433,57 @@ rollout AKR_Rollout "动画关键帧精简 V0.58"
         )
     )
 
+    on btnReduce pressed do
+    (
+        executeReduction false
+    )
+
+    fn executeRepeatReductionWithPreset =
+    (
+        local savedLocalPos = spnLocalPos.value
+        local savedRotation = spnRotation.value
+        local savedTrajectory = spnTrajectory.value
+        local savedSafety = spnSafety.value
+
+        -- 只临时放宽，不会把用户已经设置得更宽的参数改小。
+        local repeatLocalPos = amax savedLocalPos 0.15
+        local repeatRotation = amax savedRotation 0.35
+        local repeatTrajectory = amax savedTrajectory 0.25
+        local repeatSafety = amax savedSafety 1.20
+
+        try
+        (
+            spnLocalPos.value = repeatLocalPos
+            spnRotation.value = repeatRotation
+            spnTrajectory.value = repeatTrajectory
+            spnSafety.value = repeatSafety
+
+            format "Repeat temporary preset - LocalPos: %, Rotation: %, Trajectory: %, Safety: %\n" repeatLocalPos repeatRotation repeatTrajectory repeatSafety
+            executeReduction true
+        )
+        catch
+        (
+            messageBox (getCurrentException()) title:"Animation Key Reducer Repeat Error"
+        )
+
+        -- 无论执行成功或报错，都恢复点击按钮前的界面参数。
+        spnLocalPos.value = savedLocalPos
+        spnRotation.value = savedRotation
+        spnTrajectory.value = savedTrajectory
+        spnSafety.value = savedSafety
+
+        true
+    )
+
+    on btnReduceAgain pressed do
+    (
+        executeRepeatReductionWithPreset()
+    )
+
     on AKR_Rollout open do
     (
         refreshPoseLists()
     )
 )
 
-createDialog AKR_Rollout width:350 height:1035
+createDialog AKR_Rollout width:350 height:1070
