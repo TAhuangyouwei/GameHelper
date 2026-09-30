@@ -575,7 +575,7 @@ fn getControllerBaseValue controller transformIndex =
 
         if classOf oldValue == Float then
         (
-            resultValue = oldValue
+            resultValue = (formattedPrint oldValue format:".9g") as float
         )
         else if classOf oldValue == Integer then
         (
@@ -659,7 +659,7 @@ fn ensureAxisFloatScript dummyObj transformIndex axisIndex =
 
         try
         (
-            newController.script = baseValue as string
+            newController.script = formattedPrint (baseValue as float) format:".9g"
         )
         catch
         (
