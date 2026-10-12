@@ -172,6 +172,8 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
     (
         local result = false
         try (if n.isBone do result = true) catch()
+        try (if isKindOf n BoneGeometry do result = true) catch()
+        try (if isBipedBone n do result = true) catch()
         try (if matchPattern n.name pattern:"Bip*" ignoreCase:true do result = true) catch()
         try (if matchPattern ((classOf n) as string) pattern:"*Bip*" ignoreCase:true do result = true) catch()
         try (if matchPattern ((classOf n.controller) as string) pattern:"*Bip*" ignoreCase:true do result = true) catch()
@@ -189,15 +191,28 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
         result
     )
 
+    fn collectSceneNodes parent result =
+    (
+        for child in parent.children do
+        (
+            appendIfUnique result child
+            collectSceneNodes child result
+        )
+    )
+
     fn collectAnimationNodesExceptModels =
     (
-        for n in objects where ((not n.isHidden) and (not isModelNode n)) collect n
+        local sceneNodes = #()
+        collectSceneNodes rootNode sceneNodes
+        for n in sceneNodes where (not isModelNode n) collect n
     )
 
     fn collectModelAndSkeletonNodes =
     (
         local result = #()
-        for n in objects where ((not n.isHidden) and (isModelNode n or isSkeletonNode n)) do appendIfUnique result n
+        local sceneNodes = #()
+        collectSceneNodes rootNode sceneNodes
+        for n in sceneNodes where (isModelNode n or isSkeletonNode n) do appendIfUnique result n
         result
     )
 
@@ -207,9 +222,62 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
         for nodeName in templateNodeNames do
         (
             local n = getNodeByName nodeName exact:true
-            if n != undefined and not n.isHidden do appendIfUnique result n
+            if n != undefined do appendIfUnique result n
         )
         result
+    )
+
+    fn temporarilyUnhideNodesForExport nodes =
+    (
+        local nodeHiddenStates = #()
+        local layerHiddenStates = #()
+        local nodesToUnhide = #()
+        local layersToUnhide = #()
+        for n in nodes do
+        (
+            local current = n
+            while current != undefined and current != rootNode do
+            (
+                appendIfUnique nodesToUnhide current
+                current = current.parent
+            )
+            collectSceneNodes n nodesToUnhide
+        )
+        for n in nodesToUnhide do
+        (
+            local wasNodeHidden = false
+            try (wasNodeHidden = n.isNodeHidden) catch()
+            append nodeHiddenStates #(n, wasNodeHidden)
+            if wasNodeHidden do try (n.isNodeHidden = false) catch()
+
+            local layer = undefined
+            try (layer = n.INodeLayerProperties.layer) catch()
+            if layer != undefined do appendIfUnique layersToUnhide layer
+        )
+        for layer in layersToUnhide do
+        (
+            local wasLayerHidden = false
+            try (wasLayerHidden = layer.isHidden) catch()
+            append layerHiddenStates #(layer, wasLayerHidden)
+            if wasLayerHidden do try (layer.isHidden = false) catch()
+        )
+        #(nodeHiddenStates, layerHiddenStates)
+    )
+
+    fn restoreNodeHiddenStates hiddenStates =
+    (
+        if hiddenStates.count != 2 then return false
+        for state in hiddenStates[1] do
+        (
+            local n = state[1]
+            try (n.isNodeHidden = state[2]) catch()
+        )
+        for state in hiddenStates[2] do
+        (
+            local layer = state[1]
+            try (layer.isHidden = state[2]) catch()
+        )
+        true
     )
 
     fn frameFromTime t =
@@ -294,15 +362,17 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
         )
     )
 
-    fn exportSelectedNodesToFbx nodes fbxPath exportAnimation promptUser resetSettings =
+    fn exportSelectedNodesToFbx nodes fbxPath exportAnimation promptUser resetSettings unhideNodes =
     (
         if nodes.count == 0 then return false
         ensureDir (getFilenamePath fbxPath)
         local oldSelection = selection as array
+        local hiddenStates = #()
         local ok = false
         try
         (
             configureFbxExporter exportAnimation resetSettings
+            if unhideNodes do hiddenStates = temporarilyUnhideNodesForExport nodes
             select nodes
             try (deleteFile fbxPath) catch()
             if promptUser then
@@ -320,6 +390,7 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
         (
             ok = false
         )
+        try (restoreNodeHiddenStates hiddenStates) catch()
         try (select oldSelection) catch()
         ok
     )
@@ -335,7 +406,7 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
         )
 
         lblStatus.text = "状态：导出 FBX " + fbxPath
-        exportSelectedNodesToFbx nodes fbxPath exportAnimation promptUser resetSettings
+        exportSelectedNodesToFbx nodes fbxPath exportAnimation promptUser resetSettings true
     )
 
 --     fn exportOneMax item promptUser resetSettings =
@@ -454,18 +525,12 @@ rollout BajieFbxBatchExporter "FBX 批量导出" width:760 height:620
 		local minTime = undefined
 		local maxTime = undefined
 		
-		max select all 
+		local sceneNodes = #()
+		collectSceneNodes rootNode sceneNodes
 
-		for obj in selection do
+		for obj in sceneNodes do
 		(
-			local isBone = false
-			
-			try
-				isBone = isKindOf obj BoneGeometry
-			catch
-				isBone = false
-
-			if isBone or isBipedBone obj do
+			if isSkeletonNode obj do
 			(
 				local r = getControllerKeyRange obj.controller
 				

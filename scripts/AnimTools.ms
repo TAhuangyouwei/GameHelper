@@ -639,7 +639,7 @@ rollout AniTools "动作工具"
 
 		on bt_wh pressed do
 		(
-			local helpPath = @"D:\3dsmax-2021.1-maxscript-help-chm\maxscript-2021.chm"
+			local helpPath = @"F:\MaxScript\maxscript-help\maxscript-2021-help.chm"
 
 			if doesFileExist helpPath then
 			(
