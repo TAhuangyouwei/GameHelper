@@ -333,6 +333,27 @@ rollout KeyRangeTool "动画范围工具" width:280 height:350
 		hideByCategory.bones  = on 
 		viewport.setCamera cameras[1]
 		
+		presetFile = getDir #renderPresets + "\\Anime_Render.rps"
+
+		if doesFileExist presetFile then
+		(
+			local isOpen = renderSceneDialog.isOpen()
+
+			if not isOpen do
+			(
+				renderSceneDialog.open()
+			)
+
+			renderPresets.Load 0 presetFile #{1..100}
+
+			renderSceneDialog.update()
+			
+		)
+		else
+		(
+			messageBox ("没有找到渲染预设:\n" + presetFile)
+		)
+		
     )
 
 )

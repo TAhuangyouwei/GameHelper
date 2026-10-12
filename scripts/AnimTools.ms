@@ -66,6 +66,25 @@ fn CGH_GetCurrentScriptFolder =
 	sourceFolder
 )
 
+fn CGH_GetMainFolder =
+(
+	local scriptFolder = CGH_GetCurrentScriptFolder()
+
+	if scriptFolder == "" then
+	(
+		return ""
+	)
+
+	-- 去掉路径最后的 \
+	scriptFolder = trimRight scriptFolder "\\"
+
+	-- 获取上一级 GameHelper
+	local mainFolder = getFilenamePath scriptFolder
+
+	return mainFolder
+)
+
+
 /* ============================================================
 初始化 GameHelper
 ============================================================ */
@@ -639,7 +658,17 @@ rollout AniTools "动作工具"
 
 		on bt_wh pressed do
 		(
-			local helpPath = @"F:\MaxScript\maxscript-help\maxscript-2021-help.chm"
+			local rootDir = CGH_GetMainFolder()
+
+			if rootDir == "" then
+			(
+				messageBox "无法获取 GameHelper 根目录。"
+				return false
+			)
+
+
+			local helpPath = rootDir + @"docs\maxscript-2021-help.chm"
+
 
 			if doesFileExist helpPath then
 			(
