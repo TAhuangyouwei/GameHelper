@@ -52,4 +52,6 @@
     <Assign_Hotkey Shortcut="Alt+`" Description="Select Symmetrical" Id="972555510-40188"/>
     <Assign_Hotkey Shortcut="A" Description="Select Children (Including Hidden)" Id="647394-SelectChildrenIncludingHidden`_HYW"/>
     <Assign_Hotkey Shortcut="Q" Description="Select Parent (Including Hidden)" Id="647394-SelectParentIncludingHidden`_HYW"/>
+    <Unassign_Hotkey Shortcut="Ctrl+S" Description="Save File" Id="0-40006"/>
+    <Assign_Hotkey Shortcut="Ctrl+S" Description="Save MAX File to Version -3" Id="647394-SaveMaxToThreeVersionsEarlier`_HYW"/>
 </MaxHotkeyTransformations>
