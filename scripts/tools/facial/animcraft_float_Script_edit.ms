@@ -1341,7 +1341,6 @@ rollout floatScriptsRollout "AnimCraft Float Scripts" width:1400 height:650
 
     button btnRefresh "Ë¢ÐÂ" pos:[1025,570] width:90 height:32
 
-
     label lblStatus "Ready" pos:[1130,578] width:250 height:18
 
 
@@ -2123,7 +2122,7 @@ rollout floatScriptsRollout "AnimCraft Float Scripts" width:1400 height:650
         grpTarget.width = size.x - 20
 
 
-        ddlTransform.pos = [25,bottomY + 20]
+        ddlTransform.pos = [25,bottomY + 40]
 
 
         chkX.pos = [205,bottomY + 38]

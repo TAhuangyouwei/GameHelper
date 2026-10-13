@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MaxHotkeyTransformations Locked="false">
+    <Assign_Hotkey Shortcut="Ctrl+I" Id="951718758-40022"/>
+    <Assign_Hotkey Shortcut="Space" Id="2077580866-40020"/>
+    <Assign_Hotkey Shortcut="B" Id="0-40064"/>
+    <Assign_Hotkey Shortcut="Ins" Id="0-226"/>
+    <Assign_Hotkey Shortcut="Shift+W" Id="0-40005"/>
+    <Assign_Hotkey Shortcut="1" Id="0-50021"/>
+    <Assign_Hotkey Shortcut="3" Id="0-50022"/>
+    <Assign_Hotkey Shortcut="2" Id="0-50020"/>
+    <Assign_Hotkey Shortcut="Shift+B" Id="0-223"/>
+    <Assign_Hotkey Shortcut="Shift+V" Id="0-277"/>
+    <Assign_Hotkey Shortcut="Shift+F3" Id="3450739058-1"/>
+    <Assign_Hotkey Shortcut="4" Id="647394-LayerManager`Layers"/>
+    <Assign_Hotkey Shortcut="Ctrl+C" Id="647394-Camera_CreateFromView`Lights and Cameras"/>
+    <Assign_Hotkey Shortcut="Num+5" Id="647394-LaunchFCurveEditor`Track View"/>
+    <Assign_Hotkey Shortcut="5" Id="647394-LaunchFCurveEditor`Track View"/>
+    <Assign_Hotkey Shortcut="W" Id="647394-Move`Tools"/>
+    <Assign_Hotkey Shortcut="Shift+`" Id="647394-RemoveZeroWeights`Skin Modifier"/>
+    <Unassign_Hotkey Shortcut="Alt+R" Id="2077580866-45348"/>
+    <Unassign_Hotkey Shortcut="Ctrl+L" Id="2077580866-40020"/>
+    <Unassign_Hotkey Shortcut="Shift+V" Id="0-40033"/>
+    <Unassign_Hotkey Shortcut="Shift+`" Id="0-40067"/>
+    <Unassign_Hotkey Shortcut="A" Id="0-40074"/>
+    <Unassign_Hotkey Shortcut="B" Id="0-40063"/>
+    <Unassign_Hotkey Shortcut="W" Id="0-50001"/>
+    <Unassign_Hotkey Shortcut="Alt+J" Id="0-470"/>
+    <Unassign_Hotkey Shortcut="Shift+F3" Id="3450739058-12"/>
+    <Unassign_Hotkey Shortcut="Y" Id="647394-SmartPlace`Tools"/>
+    <Unassign_Hotkey Shortcut="Ins" Id="647394-PivotMode_Toggle`Tools"/>
+    <Unassign_Hotkey Shortcut="1" Id="647394-SubObject_1`Modifier Stack"/>
+    <Unassign_Hotkey Shortcut="2" Id="647394-SubObject_2`Modifier Stack"/>
+    <Unassign_Hotkey Shortcut="3" Id="647394-SubObject_3`Modifier Stack"/>
+    <Unassign_Hotkey Shortcut="4" Id="647394-SubObject_4`Modifier Stack"/>
+    <Unassign_Hotkey Shortcut="5" Id="647394-SubObject_5`Modifier Stack"/>
+    <Unassign_Hotkey Shortcut="Ctrl+C" Id="647394-PhysicalCamera_CreateFromView`Lights and Cameras"/>
+    <Unassign_Hotkey Shortcut="Q" Id="647394-SmartSelect`Selection"/>
+    <Assign_Hotkey Shortcut="`" Description="Select Opposite" Id="972555510-40189"/>
+    <Unassign_Hotkey Shortcut="Alt+1" Description="Swift Loop" Id="647394-SwiftLoop`PolyTools"/>
+    <Assign_Hotkey Shortcut="Alt+1" Description="Left View" Id="0-40061"/>
+    <Unassign_Hotkey Shortcut="Alt+2" Description="Set Flow" Id="647394-SetFlow`PolyTools"/>
+    <Assign_Hotkey Shortcut="Alt+2" Description="Right View" Id="0-40062"/>
+    <Unassign_Hotkey Shortcut="Alt+4" Description="PolyShift Move" Id="647394-PolyShiftMove`PolyTools"/>
+    <Assign_Hotkey Shortcut="Alt+4" Description="Weight Tool Dialog (Skin)" Id="647394-WeightTool_Dialog`Skin Modifier"/>
+    <Unassign_Hotkey Shortcut="Alt+B" Description="Viewport Background" Id="0-40095"/>
+    <Assign_Hotkey Shortcut="Alt+B" Description="Add Bones (Skin)" Id="647394-AddBonesFromView`Skin Modifier"/>
+    <Assign_Hotkey Shortcut="Shift+1" Description="Link Constraint" Id="647394-LinkConstraint`Constraints"/>
+    <Assign_Hotkey Shortcut="Shift+2" Description="Orientation Constraint" Id="647394-Orientation_Constraint`Constraints"/>
+    <Assign_Hotkey Shortcut="Shift+3" Description="Position Constraint" Id="647394-Position_Constraint`Constraints"/>
+    <Unassign_Hotkey Shortcut="Shift+4" Description="Spot/Directional Light View" Id="0-217"/>
+    <Assign_Hotkey Shortcut="Shift+4" Description="LookAt Constraint" Id="647394-LookAt`Constraints"/>
+    <Assign_Hotkey Shortcut="Alt+`" Description="Select Symmetrical" Id="972555510-40188"/>
+    <Assign_Hotkey Shortcut="A" Description="Select Children (Including Hidden)" Id="647394-SelectChildrenIncludingHidden`_HYW"/>
+    <Assign_Hotkey Shortcut="Q" Description="Select Parent (Including Hidden)" Id="647394-SelectParentIncludingHidden`_HYW"/>
+</MaxHotkeyTransformations>
