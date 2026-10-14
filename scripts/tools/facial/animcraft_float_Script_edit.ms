@@ -1261,9 +1261,14 @@ rollout editFloatScriptRollout "Edit Variable Expression" width:560 height:190
 
                             redrawViews()
 
-                            try (floatScriptsRollout.refreshTrackList()) catch()
-
                             destroyDialog editFloatScriptRollout
+
+                            try
+                            (
+                                floatScriptsRollout.refreshTrackList()
+                                floatScriptsRollout.selectTrackByNodeAndAxis dummyName axisKey
+                            )
+                            catch()
                         )
                         catch
                         (
