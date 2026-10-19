@@ -1263,7 +1263,7 @@ rollout modelView "资源查看"
 			ViewCubeOps.GoHome()  --透视图
 				
 -- 			disp = NitrousGraphicsManager.GetActiveViewportSetting() 
-			disp.VisualStyleMode = #ConsistentColors  
+-- 			disp.VisualStyleMode = #ConsistentColors  
 -- 			disp.VisualStyleMode = #Clay 
 			tmr_delay.active = true
 			)
