@@ -35,6 +35,17 @@ fn Get_AC_Objects =
 )
 
 
+fn SetBoneDisplay enabled =
+(
+    for i = 1 to GetNumberDisplayFilters() do
+    (
+        local n = GetDisplayFilterName i
+
+        if (n == "Bone" or n == "Bone (Geometry)") do
+            SetDisplayFilter i enabled
+    )
+)
+
 
 
 	
@@ -1257,11 +1268,13 @@ rollout modelView "资源查看"
 			loadMaxFile maxfiles[maxList.selection] useFileUnits:true  quiet:true 
 			
 			ViewPanelManager.SetActiveViewPanel 1
-			viewport.setLayout #layout_1
+			max tool maximize
+-- 			viewport.setLayout #layout_1
 			viewport.setType #view_persp_user
 				
 			hideByCategory.bones  = on 
 			
+			SetBoneDisplay true 
 				
 -- 			ViewCubeOps.GoHome()  --透视图
 				
