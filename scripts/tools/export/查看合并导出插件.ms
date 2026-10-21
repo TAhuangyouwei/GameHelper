@@ -1106,7 +1106,7 @@ rollout modelView "资源查看"
 	edittext edittext_openFolderPath "max文件路径" fieldWidth:270 height:20 labelOnTop:true readOnly:false  tooltip:"文件根目录"  offset:[-45,0]
 	button clearEdit "清空"   tooltip:"清楚路径及列表"  align:#right width:50   offset:[0,17]
 	
-	timer tmr_delay interval:1000 active:false
+-- 	timer tmr_delay interval:1000 active:false
 	
 	
 	listbox maxList "max文件列表" items:#() selection:1 height:30  tooltip:"左键双击打开文件,右键单击打开选择的文件夹"
@@ -1260,12 +1260,15 @@ rollout modelView "资源查看"
 			viewport.setLayout #layout_1
 			viewport.setType #view_persp_user
 				
-			ViewCubeOps.GoHome()  --透视图
+			hideByCategory.bones  = on 
+			
+				
+-- 			ViewCubeOps.GoHome()  --透视图
 				
 -- 			disp = NitrousGraphicsManager.GetActiveViewportSetting() 
 -- 			disp.VisualStyleMode = #ConsistentColors  
 -- 			disp.VisualStyleMode = #Clay 
-			tmr_delay.active = true
+-- 			tmr_delay.active = true
 			)
 		catch
 			(
@@ -1276,11 +1279,11 @@ rollout modelView "资源查看"
 
 	)
 	
-	on tmr_delay tick do
-	(
-		tmr_delay.active = false
-		max tool zoomextents all
-	)
+-- 	on tmr_delay tick do
+-- 	(
+-- 		tmr_delay.active = false
+-- 		max tool zoomextents all
+-- 	)
 
 	on maxList rightClick itm do 
 	(	
