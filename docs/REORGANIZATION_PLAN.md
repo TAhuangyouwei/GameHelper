@@ -57,7 +57,7 @@
 
 当前进度：
 
-- 已新增 scripts/modules/CGH_ToolRegistry.ms。
+- 已新增 scripts/公共模块/CGH_ToolRegistry.ms。
 - AnimTools.ms 的子工具按钮已改为按工具 ID 加载。
 - FBX批量导出.ms 已登记为核心工具，但暂未擅自增加主面板按钮。
 - 已增加 tests/unit_tests/test_tool_registry.ms，用于检查全部注册路径。
@@ -69,20 +69,20 @@
 
 建议按以下顺序，每组一个提交：
 
-1. 明确第三方工具迁入 scripts/vendor/
-2. 加密/混淆文件迁入 scripts/opaque/
-3. 项目专用脚本迁入 scripts/archive/project_oneoffs/
-4. 面部绑定五个文件整体迁入 scripts/tools/facial/
+1. 明确第三方工具迁入 scripts/第三方工具/
+2. 加密/混淆文件迁入 scripts/加密与封装工具/
+3. 项目专用脚本迁入 scripts/历史脚本/项目一次性脚本/
+4. 面部绑定五个文件整体迁入 scripts/实用工具/面部绑定/
 5. 动画、蒙皮、场景、导出工具分别迁入对应目录
 
 每移动一组，都同步更新注册表并执行入口冒烟测试。
 
 当前结果：
 
-- 第三方脚本已迁入 `scripts/vendor/`。
-- `.mse`、载荷和混淆脚本已迁入 `scripts/opaque/`。
-- 项目一次性脚本已迁入 `scripts/archive/project_oneoffs/`。
-- 继续维护的脚本已按用途迁入 `scripts/tools/`。
+- 第三方脚本已迁入 `scripts/第三方工具/`。
+- `.mse`、载荷和混淆脚本已迁入 `scripts/加密与封装工具/`。
+- 项目一次性脚本已迁入 `scripts/历史脚本/项目一次性脚本/`。
+- 继续维护的脚本已按用途迁入 `scripts/实用工具/`。
 - AnimTools.ms 和 HYW_Scripts_Library.ms 保留在 scripts/ 根目录，维持稳定入口。
 - 目录迁移后已再次确认注册表 20 个路径全部存在；受影响的子工具按钮仍需在交互式 3ds Max 中复测。
 
@@ -108,15 +108,15 @@
 
 HYW_Scripts_Library.ms 已缩减为兼容加载入口，原有结构按职责拆到：
 
-    modules/animation/
-    modules/interface/
-    modules/material/
-    modules/model/
-    modules/rigging/
-    modules/scene/
-    modules/skin/
-    modules/ui/
-    modules/viewport/
+    公共模块/动画/
+    公共模块/界面交互/
+    公共模块/材质/
+    公共模块/模型/
+    公共模块/骨骼绑定/
+    公共模块/场景/
+    公共模块/蒙皮/
+    公共模块/界面组件/
+    公共模块/视口/
 
 本次只移动代码，没有修改结构名、函数名或功能逻辑。后续再逐模块处理跨文件重复函数，并评估是否统一到 CGH 全局命名空间。
 

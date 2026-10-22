@@ -9,15 +9,15 @@
 - **工具候选**：功能较完整，适合继续维护。
 - **归档候选**：一次性或项目专用脚本，先保留原样。
 - **来源待确认**：尚不能确定作者、授权或当前用途。
-- **第三方**：有明确外部作者或外部项目来源，后续原样放入 vendor。
+- **第三方**：有明确外部作者或外部项目来源，后续原样放入第三方工具。
 - **隔离**：加密、混淆或嵌入二进制内容，不直接维护和执行。
 
 ## 当前目录位置
 
-- `scripts/tools/`：继续维护的动画、导出、面部绑定、绑定、蒙皮和场景工具。
-- `scripts/vendor/`：来源明确的第三方脚本，保持原始内容。
-- `scripts/opaque/`：`.mse`、封装载荷和混淆脚本。
-- `scripts/archive/project_oneoffs/`：依赖旧项目路径、节点名或覆盖式批处理的一次性脚本。
+- `scripts/实用工具/`：继续维护的动画、导出、面部绑定、绑定、蒙皮和场景工具。
+- `scripts/第三方工具/`：来源明确的第三方脚本，保持原始内容。
+- `scripts/加密与封装工具/`：`.mse`、封装载荷和混淆脚本。
+- `scripts/历史脚本/项目一次性脚本/`：依赖旧项目路径、节点名或覆盖式批处理的一次性脚本。
 - `docs/history/`：已经被正式文档取代的早期说明和目录规划。
 
 ## 已确认的作者归属
@@ -30,9 +30,9 @@
 | 文件 | 用途 | 状态 | 下一步 |
 | --- | --- | --- | --- |
 | AnimTools.ms | 总工具面板，通过统一注册表加载子工具 | 当前核心入口 | 在 3ds Max 中执行按钮冒烟测试 |
-| HYW_Scripts_Library.ms | 加载 modules 下全部公共模块，兼容旧入口 | 自写，核心入口 | 保持轻量，不再放具体功能代码 |
-| modules/ 下的分类模块 | Biped、材质、模型、场景、图层、UI、动画和蒙皮公共函数 | 已按原 struct 边界拆分 | 后续逐模块测试和优化，不在搬移提交中改逻辑 |
-| modules/CGH_ToolRegistry.ms | 统一登记和解析所有工具脚本路径 | 自写，加载基础设施 | 移动文件时只更新此注册表 |
+| HYW_Scripts_Library.ms | 加载“公共模块”目录中的全部模块，兼容旧入口 | 自写，核心入口 | 保持轻量，不再放具体功能代码 |
+| 公共模块/ 下的分类模块 | Biped、材质、模型、场景、图层、UI、动画和蒙皮公共函数 | 已按原 struct 边界拆分 | 后续逐模块测试和优化，不在搬移提交中改逻辑 |
+| 公共模块/CGH_ToolRegistry.ms | 统一登记和解析所有工具脚本路径 | 自写，加载基础设施 | 移动文件时只更新此注册表 |
 | docs/history/目录结构.txt | 早期目录规划 | 已归档 | 正式目录说明以根 README 和本清单为准 |
 
 ## 动画与导出
@@ -102,8 +102,8 @@
 
 | 文件 | 当前判断 | 处理方式 |
 | --- | --- | --- |
-| 3ds-Max-Batch-Import-Export-Tool-master/BatchExportImport - josh_axey.ms | Josh Axey 的批量导入导出工具 | 原样迁入 vendor，保留 README 和许可信息 |
-| uv特效插件.ms | 作者标注“叶孤弦” | 原样迁入 vendor |
+| 3ds-Max-Batch-Import-Export-Tool-master/BatchExportImport - josh_axey.ms | Josh Axey 的批量导入导出工具 | 原样迁入第三方工具，保留 README 和许可信息 |
+| uv特效插件.ms | 作者标注“叶孤弦” | 原样迁入第三方工具 |
 | 万锴材质拷贝.mse | 只有加密版 | 迁入发布/不透明依赖区，记录来源 |
 | AutoFbxtoBip v1.4.ms；AutoFbxtoBip v1.4.mse | .ms 为封装载荷，不是可读源码 | 隔离并确认原始来源 |
 | closemaxscript_1.2_0反混淆.ms | 内嵌 .NET 二进制载荷 | 隔离，确认可信来源前不执行 |
@@ -112,4 +112,4 @@
 
 - 添加头套挂点.ms 与 添加女头套挂点.ms 文件内容完全相同。
 - 接缝焊接脚本.ms 与 copy_paste_skin_weight.ms 都定义了 findModifier、createBoneNameIDMap、ensureAllBonesExist、autoStitchOptimized，适合后续抽入蒙皮公共模块。
-- modules/model/ObjectProcessing.ms 与 ikfk_v.0.2.ms 都定义了 RotatePivotOnly，整理第三方边界后再决定是否合并。
+- 公共模块/模型/ObjectProcessing.ms 与 ikfk_v.0.2.ms 都定义了 RotatePivotOnly，整理第三方边界后再决定是否合并。

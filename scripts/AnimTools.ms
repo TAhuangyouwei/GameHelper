@@ -111,7 +111,7 @@ fn CGH_InitializeAniTools =
 		return false
 	)
 
-	toolRegistryPath = pathConfig.appendPath CGH_MainFolder @"modules\CGH_ToolRegistry.ms"
+	toolRegistryPath = pathConfig.appendPath CGH_MainFolder @"¹«¹²Ä£¿é\CGH_ToolRegistry.ms"
 
 	format "\n-------------------------------------\n"
 	format "GameHelper Root: %\n" CGH_MainFolder

@@ -15,16 +15,18 @@ AnimTools.ms                   主面板，类似遥控器
     |
     +-- HYW_Scripts_Library.ms 公共库加载入口
             |
-            +-- modules/       按材质、绑定、场景等职责保存公共能力
+            +-- 公共模块/       按材质、绑定、场景等职责保存公共能力
     |
-    +-- tools/vendor/opaque/   被按钮打开的具体子工具和外部依赖
+    +-- 实用工具/             被按钮打开的具体子工具
+    +-- 第三方工具/           第三方脚本
+    +-- 加密与封装工具/       加密脚本和配套程序
 ```
 
 - `AnimTools.ms` 负责显示按钮，以及决定点击按钮后做什么。
 - `CGH_ToolRegistry.ms` 只负责把工具编号对应到脚本路径。
 - `HYW_Scripts_Library.ms` 只负责依次加载公共模块，保留旧脚本的入口兼容性。
-- `scripts/modules/` 下的分类文件保存材质、骨骼、界面和动画等真正的公共功能。
-- `scripts/tools/export/FBX批量导出.ms`、`scripts/tools/export/查看合并导出插件.ms` 等文件仍然保存各自真正的业务逻辑。
+- `scripts/公共模块/` 下的分类文件保存材质、骨骼、界面和动画等真正的公共功能。
+- `scripts/实用工具/导出/FBX批量导出.ms`、`scripts/实用工具/导出/查看合并导出插件.ms` 等文件仍然保存各自真正的业务逻辑。
 
 所以，这次增加注册表不会改变导出规则、合并规则、蒙皮算法或动画算法。
 
@@ -56,13 +58,13 @@ on btQuickLook pressed do
 
 这表示点击“查看导出合并文件”后，让注册表找到并运行对应脚本。
 
-### 2.2 `scripts/tools/export/FBX批量导出.ms`
+### 2.2 `scripts/实用工具/导出/FBX批量导出.ms`
 
 这是独立的批量导出界面。目前它已经登记到注册表，编号是 `#fbxBatchExporter`，但没有擅自给 `AnimTools` 增加新按钮。
 
 这个脚本会涉及打开 Max 文件和导出 FBX。以后修改它时，必须先使用测试场景副本，不要直接拿正式项目文件试验。
 
-### 2.3 `scripts/tools/export/查看合并导出插件.ms`
+### 2.3 `scripts/实用工具/导出/查看合并导出插件.ms`
 
 这是 `AnimTools` 中“查看导出合并文件”按钮打开的脚本，注册编号是 `#viewerExporter`。
 
@@ -83,7 +85,7 @@ on btQuickLook pressed do
 新增文件：
 
 ```text
-scripts/modules/CGH_ToolRegistry.ms
+scripts/公共模块/CGH_ToolRegistry.ms
 ```
 
 以前每个按钮都自己获取目录、拼接路径、再加载脚本。类似：
@@ -105,7 +107,7 @@ fileIn rulesScript
 文件名和路径集中写在注册表里：
 
 ```maxscript
-#viewerExporter: "tools/export/查看合并导出插件.ms"
+#viewerExporter: "实用工具/导出/查看合并导出插件.ms"
 ```
 
 将来移动文件时，通常只需要改注册表中的一行。
@@ -116,12 +118,12 @@ fileIn rulesScript
 
 ```text
 1. 找到 AnimTools.ms 自己所在的目录
-2. 拼出 modules/CGH_ToolRegistry.ms 的完整路径
+2. 拼出 公共模块/CGH_ToolRegistry.ms 的完整路径
 3. 检查注册表文件是否存在
 4. 加载注册表
 5. 把 scripts 目录交给注册表作为根目录
 6. 通过注册表加载 HYW_Scripts_Library.ms
-7. HYW_Scripts_Library.ms 依次加载 modules 下的公共模块
+7. HYW_Scripts_Library.ms 依次加载“公共模块”目录中的文件
 8. 创建 AnimTools 面板
 ```
 
@@ -129,7 +131,7 @@ fileIn rulesScript
 
 ```maxscript
 currentFolder = getFilenamePath (getThisScriptFilename())
-toolRegistryScript = pathConfig.appendPath currentFolder "modules/CGH_ToolRegistry.ms"
+toolRegistryScript = pathConfig.appendPath currentFolder "公共模块/CGH_ToolRegistry.ms"
 
 if doesFileExist toolRegistryScript then
 (
@@ -206,8 +208,8 @@ fn getRelativePath toolId =
 (
     case toolId of
     (
-        #viewerExporter: "tools/export/查看合并导出插件.ms"
-        #fbxBatchExporter: "tools/export/FBX批量导出.ms"
+        #viewerExporter: "实用工具/导出/查看合并导出插件.ms"
+        #fbxBatchExporter: "实用工具/导出/FBX批量导出.ms"
         default: undefined
     )
 )
@@ -225,8 +227,8 @@ fn getRelativePath toolId =
 
 ```text
 根目录：D:\UGit\GameHelper\scripts\
-相对路径：tools/export/查看合并导出插件.ms
-完整路径：D:\UGit\GameHelper\scripts\tools\export\查看合并导出插件.ms
+相对路径：实用工具/导出/查看合并导出插件.ms
+完整路径：D:\UGit\GameHelper\scripts\实用工具\导出\查看合并导出插件.ms
 ```
 
 ### 4.5 `loadTool`
@@ -293,7 +295,7 @@ button btQuickLook "查看、合并与导出" height:21 width:200
 再到注册表查询：
 
 ```maxscript
-#viewerExporter: "tools/export/查看合并导出插件.ms"
+#viewerExporter: "实用工具/导出/查看合并导出插件.ms"
 ```
 
 然后只修改 `查看合并导出插件.ms`。这种情况下通常不需要改 `AnimTools.ms` 和注册表。
@@ -303,13 +305,13 @@ button btQuickLook "查看、合并与导出" height:21 width:200
 当前文件已经移动到：
 
 ```text
-scripts/tools/export/查看合并导出插件.ms
+scripts/实用工具/导出/查看合并导出插件.ms
 ```
 
 对应修改注册表：
 
 ```maxscript
-#viewerExporter: "tools/export/查看合并导出插件.ms"
+#viewerExporter: "实用工具/导出/查看合并导出插件.ms"
 ```
 
 `AnimTools.ms` 中的 `#viewerExporter` 不需要改变。
@@ -358,7 +360,7 @@ AnimTools 按钮事件中的 #myCheckTool
 注册表已经有：
 
 ```maxscript
-#fbxBatchExporter: "tools/export/FBX批量导出.ms"
+#fbxBatchExporter: "实用工具/导出/FBX批量导出.ms"
 ```
 
 因此只需要在 `AnimTools.ms` 中增加按钮和事件：
@@ -494,11 +496,11 @@ docs: 补充 FBX 导出使用说明
 
 ### `GameHelper registry was not found`
 
-含义：`AnimTools.ms` 旁边没有找到 `modules/CGH_ToolRegistry.ms`。
+含义：`AnimTools.ms` 旁边没有找到 `公共模块/CGH_ToolRegistry.ms`。
 
 检查：
 
-- 是否只复制了 `AnimTools.ms`，没有复制 `modules` 文件夹；
+- 是否只复制了 `AnimTools.ms`，没有复制 `公共模块` 文件夹；
 - 是否把注册表改名；
 - `AnimTools.ms` 是否还在 `scripts` 目录。
 
@@ -519,7 +521,7 @@ docs: 补充 FBX 导出使用说明
 可能原因：
 
 - `HYW_Scripts_Library.ms` 没有成功加载；
-- `HYW_Scripts_Library.ms` 提示某个 modules 文件不存在；
+- `HYW_Scripts_Library.ms` 提示某个公共模块文件不存在；
 - 公共函数名被修改；
 - 运行了单独代码片段，但没有先运行完整入口；
 - 脚本前面已经报错，后面没有继续执行。

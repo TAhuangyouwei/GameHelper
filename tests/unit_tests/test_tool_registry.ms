@@ -1,12 +1,12 @@
 /*
-    Smoke test for scripts/modules/CGH_ToolRegistry.ms.
+    Smoke test for scripts/公共模块/CGH_ToolRegistry.ms.
     Run with 3dsmaxbatch.exe; this test only checks registered file paths.
 */
 
 (
     local testRoot = getFilenamePath (getThisScriptFilename())
     local scriptsRoot = pathConfig.appendPath testRoot "../../scripts"
-    local registryPath = pathConfig.appendPath scriptsRoot "modules/CGH_ToolRegistry.ms"
+    local registryPath = pathConfig.appendPath scriptsRoot "公共模块/CGH_ToolRegistry.ms"
     local toolIds = #(
         #library,
         #animTools,

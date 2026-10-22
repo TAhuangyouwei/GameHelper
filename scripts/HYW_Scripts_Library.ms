@@ -2,26 +2,26 @@
 /*
     GameHelper 公共库兼容入口。
 
-    功能代码已经拆分到 modules 子目录。旧脚本仍然只需要 fileIn 本文件，
+    功能代码已经拆分到“公共模块”子目录。旧脚本仍然只需要 fileIn 本文件，
     原来的结构名和调用方式保持不变。
 */
 (
     local libraryFolder = getFilenamePath (getThisScriptFilename())
     local moduleRelativePaths = #(
-        "modules/material/MaterialUtilities.ms",
-        "modules/rigging/BipedFunctions.ms",
-        "modules/rigging/CustomIKHISolver.ms",
-        "modules/model/ModelUtilities.ms",
-        "modules/model/ObjectProcessing.ms",
-        "modules/viewport/ViewportUtilities.ms",
-        "modules/scene/SceneUtilities.ms",
-        "modules/scene/LayerUtilities.ms",
-        "modules/interface/InterfaceUtilities.ms",
-        "modules/rigging/BoneUtilities.ms",
-        "modules/animation/AnimationUtilities.ms",
-        "modules/skin/BoneSkinUtilities.ms",
-        "modules/ui/RolloutUiUtilities.ms",
-        "modules/ui/EmbeddedImageData.ms"
+        "公共模块/材质/MaterialUtilities.ms",
+        "公共模块/骨骼绑定/BipedFunctions.ms",
+        "公共模块/骨骼绑定/CustomIKHISolver.ms",
+        "公共模块/模型/ModelUtilities.ms",
+        "公共模块/模型/ObjectProcessing.ms",
+        "公共模块/视口/ViewportUtilities.ms",
+        "公共模块/场景/SceneUtilities.ms",
+        "公共模块/场景/LayerUtilities.ms",
+        "公共模块/界面交互/InterfaceUtilities.ms",
+        "公共模块/骨骼绑定/BoneUtilities.ms",
+        "公共模块/动画/AnimationUtilities.ms",
+        "公共模块/蒙皮/BoneSkinUtilities.ms",
+        "公共模块/界面组件/RolloutUiUtilities.ms",
+        "公共模块/界面组件/EmbeddedImageData.ms"
     )
     local missingModulePaths = #()
 

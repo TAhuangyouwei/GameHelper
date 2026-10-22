@@ -1,7 +1,7 @@
 MyMaxScriptProject/                # 项目根目录
 ├── scripts/                       # 脚本核心目录
 │   ├── main.ms                    # 主入口脚本
-│   ├── modules/                   # 模块化脚本（工具函数、类库）
+│   ├── 公共模块/                   # 模块化脚本（工具函数、类库）
 │   └── third_party/               # 第三方库或插件脚本
 │
 ├── assets/                        # 静态资源
