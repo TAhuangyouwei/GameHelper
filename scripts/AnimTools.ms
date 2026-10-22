@@ -160,10 +160,8 @@ fn CGH_InitializeAniTools =
 
 	try
 	(
-		::CGH_ToolRegistry.initialize CGH_MainFolder
-		::CGH_ToolRegistry.loadTool #library
-
-		initSuccess = true
+		if not (::CGH_ToolRegistry.initialize CGH_MainFolder) do return false
+		initSuccess = ::CGH_ToolRegistry.loadTool #library
 	)
 	catch
 	(

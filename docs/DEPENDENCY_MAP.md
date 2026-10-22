@@ -13,9 +13,9 @@
        ├─ scripts/实用工具/动画/Process_text_file_for_animation_range.ms
        ├─ scripts/实用工具/骨骼绑定/bonedivider.ms
        ├─ scripts/实用工具/动画/复制物体运动轨迹.ms
-       ├─ scripts/加密与封装工具/参考大师/参考大师v1.06.mse
+       ├─ scripts/实用工具/动画/参考大师v1.06.ms
        ├─ scripts/AnimTools.ms                             # 切换语言时重新加载自身
-       ├─ scripts/加密与封装工具/重置蒙皮姿态/重置蒙皮pose V1.1.mse
+       ├─ scripts/实用工具/蒙皮/重置蒙皮pose V1.1.ms
        ├─ scripts/实用工具/蒙皮/Rigging_CombineSkin.ms
        ├─ scripts/实用工具/面部绑定/facialRig_UI.ms
        ├─ scripts/实用工具/骨骼绑定/自定义骨骼绑定.ms
@@ -28,6 +28,8 @@
        └─ scripts/实用工具/面部绑定/animcraft_float_Script_edit.ms
 
 所有主面板子工具路径集中在 `CGH_ToolRegistry.ms`。以后移动脚本时只修改注册表，不改按钮事件中的工具编号。
+
+参考大师和重置蒙皮姿态已改为加载上述可读 `.ms`，修改这些源码即可影响对应按钮。FBX 转 Biped、还原 Biped 的同名 `.ms` 仍是二进制封装，目前继续加载原 `.mse`，尚无可切换的可读源码。
 
 ## 面部绑定
 
@@ -60,6 +62,8 @@
                                                                                └─> 公共模块/界面组件/EmbeddedImageData.ms
 
 `HYW_Scripts_Library.ms` 只负责加载公共模块。`自定义骨骼绑定.ms` 从 `实用工具/骨骼绑定/` 向上解析到这个兼容入口。
+
+公共库先检查全部必要模块，再依次执行；缺失模块或模块执行错误会抛出包含文件路径的错误，全部加载完成后返回 `true`。主面板检查注册表初始化及公共库加载结果，失败时不创建面板。
 
 ## 独立工具
 

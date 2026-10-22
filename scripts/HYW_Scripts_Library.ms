@@ -29,9 +29,7 @@
     (
         local modulePath = pathConfig.appendPath libraryFolder relativePath
 
-        if doesFileExist modulePath then
-            fileIn modulePath
-        else
+        if not doesFileExist modulePath do
             append missingModulePaths modulePath
     )
 
@@ -42,6 +40,16 @@
         for modulePath in missingModulePaths do
             warningMessage += "\n" + modulePath
 
-        messageBox warningMessage title:"GameHelper 加载失败"
+        throw warningMessage
     )
+
+    for relativePath in moduleRelativePaths do
+    (
+        local modulePath = pathConfig.appendPath libraryFolder relativePath
+
+        try (fileIn modulePath)
+        catch (throw ("GameHelper 公共模块加载失败：\n" + modulePath + "\n\n" + getCurrentException()))
+    )
+
+    true
 )
