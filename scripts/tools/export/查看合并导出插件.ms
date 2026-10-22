@@ -1120,7 +1120,10 @@ rollout modelView "资源查看"
 -- 	timer tmr_delay interval:1000 active:false
 	
 	
-	listbox maxList "max文件列表" items:#() selection:1 height:30  tooltip:"左键双击打开文件,右键单击打开选择的文件夹"
+	button btnFavorite "收藏选中动作" width:140 across:2 enabled:false
+	checkbox chkFavoritesOnly "只看收藏（当前目录）" checked:false width:180
+	
+	listbox maxList "max文件列表" items:#() selection:1 height:28  tooltip:"左键双击打开文件,右键单击打开选择的文件夹"
 	
 	
 	button btn1 "XRef Scenes" width:100 across:3
@@ -1135,6 +1138,98 @@ rollout modelView "资源查看"
 	
 	
 	local baseXRef,newXRef
+	local filteredFiles = #()
+	local favoritePaths = #()
+	local favoritesReady = false
+	local favoritesRoot = getFilenamePath (trimRight ::CGH_ToolRegistry.rootPath "\\/")
+	local favoritesFile = pathConfig.appendPath favoritesRoot "GameHelper_AnimationFavorites.txt"
+	local favoriteFileIO = dotNetClass "System.IO.File"
+
+	fn favoriteKey file = toLower ((dotNetClass "System.IO.Path").GetFullPath file)
+
+	fn isFavorite file = (findItem favoritePaths (favoriteKey file)) != 0
+
+	fn updateFavoriteButton =
+	(
+		local index = maxList.selection
+		btnFavorite.enabled = favoritesReady and index > 0 and index <= maxfiles.count
+		btnFavorite.text = if btnFavorite.enabled and (isFavorite maxfiles[index]) then "取消收藏" else "收藏选中动作"
+	)
+
+	fn loadFavorites =
+	(
+		favoritesReady = false
+		favoritePaths = #()
+		try
+		(
+			if favoriteFileIO.Exists favoritesFile do
+			(
+				local lines = favoriteFileIO.ReadAllLines favoritesFile
+				for line in lines where line != "" do appendIfUnique favoritePaths (favoriteKey line)
+			)
+			favoritesReady = true
+		)
+		catch (messageBox ("收藏记录读取失败：\n" + favoritesFile + "\n" + getCurrentException()))
+		chkFavoritesOnly.enabled = favoritesReady
+		updateFavoriteButton()
+	)
+
+	fn saveFavorites paths =
+	(
+		local tempFile = favoritesFile + ".tmp"
+		try
+		(
+			local lines = dotNet.ValueToDotNetObject paths (dotNetClass "System.String[]")
+			favoriteFileIO.WriteAllLines tempFile lines
+			if favoriteFileIO.Exists favoritesFile then
+				favoriteFileIO.Replace tempFile favoritesFile (favoritesFile + ".bak")
+			else
+				favoriteFileIO.Move tempFile favoritesFile
+			true
+		)
+		catch
+		(
+			messageBox ("收藏保存失败，本次更改未生效：\n" + favoritesFile + "\n" + getCurrentException())
+			false
+		)
+	)
+
+	fn refreshFavoriteList =
+	(
+		local oldIndex = maxList.selection
+		local selectedFile = if oldIndex > 0 and oldIndex <= maxfiles.count then maxfiles[oldIndex] else undefined
+		maxfiles = for file in filteredFiles where (not chkFavoritesOnly.checked or (isFavorite file)) collect file
+		maxListItems = for file in maxfiles collect
+		(
+			local pathArray = filterString (getFilenamePath file) "\\"
+			local folderName = pathArray[pathArray.count]
+			local prefix = if isFavorite file then "[收藏] " else ""
+			prefix + folderName + "\t==>\t" + getFilenameFile file
+		)
+		maxList.items = maxListItems
+		local index = findItem maxfiles selectedFile
+		maxList.selection = if maxfiles.count == 0 then 0 else if index > 0 then index else (amax 1 (amin oldIndex maxfiles.count))
+		updateFavoriteButton()
+	)
+
+	fn toggleFavorite =
+	(
+		local index = maxList.selection
+		if not favoritesReady or index < 1 or index > maxfiles.count do return false
+		local key = favoriteKey maxfiles[index]
+		local paths = for favoritePath in favoritePaths collect favoritePath
+		local favoriteIndex = findItem paths key
+		if favoriteIndex == 0 then append paths key else deleteItem paths favoriteIndex
+		if not (saveFavorites paths) do return false
+		favoritePaths = paths
+		refreshFavoriteList()
+		true
+	)
+
+	on modelView open do loadFavorites()
+	on maxList selected itm do updateFavoriteButton()
+	on btnFavorite pressed do toggleFavorite()
+	on chkFavoritesOnly changed state do refreshFavoriteList()
 
 	-- 更新界面的尺寸
 -- 	fn updateUI listSize = 
@@ -1212,6 +1307,12 @@ rollout modelView "资源查看"
 	
 	
 	fn performFiltering = (
+		if (trimLeft (trimRight edittext_openFolderPath.text)) == "" then
+		(
+			filteredFiles = #()
+			refreshFavoriteList()
+			return false
+		)
 		maxopenpath = edittext_openFolderPath.text + "\\" + "*.max"
 		local allFiles = getFiles (trimLeft (trimRight maxopenpath)) recurse:true
 
@@ -1220,18 +1321,8 @@ rollout modelView "资源查看"
 			local keyWords = filterString allwords ", -"
 			local logic = logicDropdown.selected as string
 
-			-- 更新 maxfiles 以包含经过筛选的文件路径
-			maxfiles = filterFiles allFiles keyWords logic
-
-			-- 更新 maxList.items 以显示文件夹名称和文件名的组合字符串
-			maxListItems = for file in maxfiles collect (
-				local pathArray = filterString (getFilenamePath file) "\\"
-				local folderName = pathArray[pathArray.count]
-				local filename = getFilenameFile file
-				folderName + "\t==>\t" + filename
-			)
-
-			maxList.items = maxListItems
+			filteredFiles = filterFiles allFiles keyWords logic
+			refreshFavoriteList()
 -- 			updateUI maxListItems.count
 		) else (
 			messageBox "未找到文件。请检查路径。"
@@ -1309,7 +1400,8 @@ rollout modelView "资源查看"
 	(
 		
 		edittext_openFolderPath.text = ""
-		maxList.items = #()
+		filteredFiles = #()
+		refreshFavoriteList()
 -- 		updateUI 30
 		
 	)
