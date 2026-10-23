@@ -160,18 +160,33 @@ fn CGH_InitializeAniTools =
 
 	try
 	(
-		if not (::CGH_ToolRegistry.initialize CGH_MainFolder) do return false
-		initSuccess = ::CGH_ToolRegistry.loadTool #library
+		local registryReady = ::CGH_ToolRegistry.initialize CGH_MainFolder
+		format "Registry initialize: %\n" registryReady
+
+		if registryReady == true then
+		(
+			local libraryReady = ::CGH_ToolRegistry.loadTool #library
+			format "Library load: %\n" libraryReady
+
+			if libraryReady == true then
+				initSuccess = true
+			else
+				throw ("公共库加载未成功：\n" + (::CGH_ToolRegistry.getPath #library))
+		)
+		else
+			throw ("工具注册表初始化未成功，脚本目录：\n" + CGH_MainFolder)
 	)
 	catch
 	(
+		local errorMessage = getCurrentException()
+		format "GameHelper initialization error: %\n" errorMessage
 		messageBox
 		(
-			"CGH_ToolRegistry 初始化失败。\n\n" +
+			"GameHelper 初始化失败。\n\n" +
 			"请检查：\n" +
 			toolRegistryPath +
 			"\n\n错误信息：\n" +
-			(getCurrentException())
+			errorMessage
 		)
 
 		initSuccess = false

@@ -47,8 +47,12 @@
     (
         local modulePath = pathConfig.appendPath libraryFolder relativePath
 
+        local moduleError = undefined
         try (fileIn modulePath)
-        catch (throw ("GameHelper 公共模块加载失败：\n" + modulePath + "\n\n" + getCurrentException()))
+        catch (moduleError = getCurrentException())
+
+        if moduleError != undefined do
+            throw ("GameHelper 公共模块加载失败：\n" + modulePath + "\n\n" + moduleError)
     )
 
     true
