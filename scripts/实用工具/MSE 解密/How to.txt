@@ -1,0 +1,9 @@
+1 ) Run Quickbms.exe if single file to decrypt . Or Run Quickbms_4gb_files.ex if multiple files to decrypt
+
+2 ) click DecryptMSE.bms
+
+3.) clik file ".mse"
+
+4.) Select output folder
+
+5.) Enjoy

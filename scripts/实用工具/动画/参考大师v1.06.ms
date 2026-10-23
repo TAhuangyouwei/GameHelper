@@ -27,6 +27,7 @@
             历史:
                 保存10个历史记录
                 历史记录会保存窗口大小和图片序列开始时间
+                重新打开时按当前图片比例恢复，原图尺寸改变时重置旧裁剪
 
             加载:
                 加载按钮可以加载全部图片到内存
@@ -34,6 +35,10 @@
 
             设置:
                 打开设置界面
+                播放设置中的序列裁剪可输入左、上、宽、高（原图像素）
+                调整参数时预览黄色框内的保留区域，暗色区域将被裁掉
+                可拖动黄色框内部移动区域，拖动边框或四角调整大小；应用裁剪保留当前缩放百分比
+                裁剪统一应用到所有参考帧，不修改原图片；重置裁剪可恢复完整画面
 
             Gif:
                 Gif尺寸为原始图像尺寸 固定帧率 约30帧(0.03秒一帧)
@@ -500,7 +505,10 @@
 		local dFile_GetImageCount
 		local dFile_GetImageDatas
 		local dFile_GetImageLoadRes
+		local dFile_GetImageRes
+		local dFile_GetCrop
         local dDisplay_GetScaleRatio
+		local dDisplay_SetScaleRatio
 		local dDisplay_SetLoadRes
 
 		local dRec_GetRecordFolder
@@ -521,6 +529,7 @@
 
         --ImageSequence
         local fFile_ReadFolder   
+        local fFile_SetCrop
         local fFile_GetImage
         local fFile_Preload
         --PlayList
@@ -552,6 +561,7 @@
 
 
         local cDisplay_ScaleToRatio
+        local cDisplay_SetCrop
 		local cDisplay_IsGridOn
 		local cDisplay_ToggleGridOn
 		local cDisplay_UpdateGrid
@@ -1204,6 +1214,7 @@
 				if m_PlayerMode == MODE_PLAYER_HOME do uifn_QuitHomePanel()
 				LastDisplayIndex = 0
 				RP_Update()
+				if PlayerSetting_Rollout.hwnd != undefined and PlayerSetting_Rollout.hwnd != 0 do PlayerSetting_Rollout.LoadCrop()
 				--fFile_SavePlayList() /* Keep Ratio When ReLoaded */
 
 				true
@@ -3733,11 +3744,14 @@
 
 			local ImageRes = [0,0]
 			local LoadRes  = [0,0]
+			local CropRect = undefined
 			
             fn dFile_GetImageCount = ImageDatas.count 
 			fn dFile_GetCurrFolder = CurrFolder
 			fn dFile_GetImageDatas = ImageDatas
 			fn dFile_GetImageLoadRes = LoadRes
+			fn dFile_GetImageRes = ImageRes
+			fn dFile_GetCrop = if CropRect == undefined then undefined else (copy CropRect #noMap)
 
 			struct ImageData 
 			(
@@ -3757,7 +3771,12 @@
 					Image
 				),
 				
-				fn Dispose = if ImageLoaded do Image.Dispose()
+				fn Dispose =
+				(
+					if ImageLoaded do Image.Dispose()
+					Image = undefined
+					ImageLoaded = false
+				)
 			)
 
 
@@ -3790,7 +3809,11 @@
 				
 					local NewBitmap = dotnetobject "System.Drawing.Bitmap" LoadRes.x LoadRes.y PixelFormat
 					local g = (dotnetclass "System.Drawing.Graphics").FromImage NewBitmap
-					g.DrawImage ImageTemp (dotnetobject "System.Drawing.Rectangle" 0 0 LoadRes.x LoadRes.y)
+					local destRect = dotnetobject "System.Drawing.Rectangle" 0 0 LoadRes.x LoadRes.y
+					if CropRect == undefined then
+						g.DrawImage ImageTemp destRect
+					else
+						g.DrawImage ImageTemp destRect CropRect[1] CropRect[2] CropRect[3] CropRect[4] (dotnetclass "System.Drawing.GraphicsUnit").Pixel
 					
 					g.Dispose();ImageTemp.Dispose()
 				
@@ -3828,7 +3851,7 @@
 					)else
 					(
 						LoadRes = [imageWidth,imageHeight]
-						LoadImage = GetOriginalImage
+						LoadImage = if CropRect == undefined then GetOriginalImage else GetResizedImage
 					)
 				)
 				
@@ -3851,6 +3874,23 @@
 				for ImgData in ImageDatas do ImgData.Dispose()
 				
 				free ImageDatas
+			)
+
+			fn fFile_SetCrop rect =
+			(
+				if ImageDatas.count == 0 do return false
+				if rect != undefined do
+				(
+					if rect[1] < 0 or rect[2] < 0 or rect[3] < 1 or rect[4] < 1 do return false
+					if rect[1] + rect[3] > ImageRes.x or rect[2] + rect[4] > ImageRes.y do return false
+					if rect[1] == 0 and rect[2] == 0 and rect[3] == ImageRes.x and rect[4] == ImageRes.y do rect = undefined
+				)
+				ui_PlayerPictureBox.image = undefined
+				for ImgData in ImageDatas do ImgData.Dispose()
+				CropRect = if rect == undefined then undefined else (copy rect #noMap)
+				local res = if CropRect == undefined then ImageRes else [CropRect[3],CropRect[4]]
+				SetImageLoadSolution res.x res.y ImageDatas.count
+				true
 			)
 			
 			fn fFile_ReadFolder Folder =
@@ -3879,6 +3919,7 @@
 				FreeImgDatas()
 				
 				CurrFolder = Folder
+				CropRect = undefined
 				
 				ImageDatas = for ImgFile in imagesInPath collect (ImageData ImageFile:ImgFile)
 				
@@ -3981,7 +4022,7 @@
 
 		(----  Playlist  ----
 			
-			struct RefPlayer_PlayListData (FilePath,Width,Height,StartTime)
+			struct RefPlayer_PlayListData (FilePath,Width,Height,StartTime,SourceWidth,SourceHeight,Crop)
 			global RefPlayer_PlayListData = RefPlayer_PlayListData
 			
 			local PlayListDataArray = #()
@@ -4046,7 +4087,8 @@
 				local Height    = ui_PlayerPictureBox.Height
 				local StartTime = dTime_GetStartTime()
 				
-				RefPlayer_PlayListData FilePath:FilePath Width:Width Height:Height StartTime:StartTime
+				local SourceRes = dFile_GetImageRes()
+				RefPlayer_PlayListData FilePath:FilePath Width:Width Height:Height StartTime:StartTime SourceWidth:SourceRes.x SourceHeight:SourceRes.y Crop:(dFile_GetCrop())
 			)
 
 				
@@ -4100,13 +4142,18 @@
 				
 				if RP_OpenFile data.FilePath do
 				(
-                    ui_PlayerWindow.Width  = data.Width
-                    ui_PlayerWindow.Height = data.Height
+                    local SourceRes = dFile_GetImageRes()
+                    if data.Crop != undefined and data.SourceWidth == SourceRes.x and data.SourceHeight == SourceRes.y do
+                        fFile_SetCrop data.Crop
+                    local LoadRes = dFile_GetImageLoadRes()
+                    uifn_ResizeToRatio (data.Width as float / LoadRes.x)
                     dTime_SetStartTime data.StartTime
 
                     fFile_SavePlayList()
 
+					LastDisplayIndex = 0
 					RP_Update()
+					if PlayerSetting_Rollout.hwnd != undefined and PlayerSetting_Rollout.hwnd != 0 do PlayerSetting_Rollout.LoadCrop()
 					cDisplay_UpdateGrid()
 				)
 				
@@ -4481,6 +4528,24 @@
 			(
 				uifn_ResizeToRatio ratio
 				cDisplay_UpdateGrid()
+			)
+
+			fn cDisplay_SetCrop rect =
+			(
+				if m_PlayerMode != MODE_PLAYER_NORMAL do return false
+				local scale = ui_PlayerWindow.Width as float / (dFile_GetImageLoadRes()).x
+				if not (fFile_SetCrop rect) do return false
+				LastDisplayIndex = 0
+				RP_Update()
+				local res = dFile_GetImageLoadRes()
+				local width = amax #(1,(res.x * scale + 0.5) as integer)
+				local height = amax #(1,(res.y * scale + 0.5) as integer)
+				ui_PlayerWindow.Size = dotNetObject "System.Drawing.Size" width height
+				dDisplay_SetLoadRes res
+				dDisplay_SetScaleRatio scale
+				cDisplay_UpdateGrid()
+				fFile_SavePlayList()
+				true
 			)
 			
             fn GetRect = 
@@ -5592,6 +5657,12 @@
             
 			rollout PlayerSetting_Rollout SETTING_PLAYER_TITLE category:2 --播放设置
 			(
+				local CropPreviewSource
+				local LoadingCrop = false
+				local CropDragRect
+				local CropDragStart
+				local CropDragEdges
+
 				group "Max Ram" --最高内存占用:
 				(
 					radiobuttons RAMMode  labels:#(
@@ -5610,6 +5681,214 @@
 				group "Opacity:" --不透明度:
 				(
 					slider Opacity  range:[20,100,100] 
+				)
+
+				group "序列裁剪（原图像素）"
+				(
+					label CropSource "请先打开图片序列" align:#left
+					dotNetControl CropPreview "System.Windows.Forms.PictureBox" width:240 height:200 align:#center
+					label CropHint "黄色框内保留，暗色区域裁掉" align:#left
+					label CropMouseHint "拖动框内移动；拖动边角调整大小" align:#left
+					spinner CropLeft "左:" type:#integer range:[0,999999,0] fieldwidth:70 align:#right
+					spinner CropTop "上:" type:#integer range:[0,999999,0] fieldwidth:70 align:#right
+					spinner CropWidth "宽:" type:#integer range:[1,999999,1] fieldwidth:70 align:#right
+					spinner CropHeight "高:" type:#integer range:[1,999999,1] fieldwidth:70 align:#right
+					button ApplyCrop "应用裁剪" across:2 width:95
+					button ResetCrop "重置裁剪" width:95
+				)
+
+				fn FreeCropPreview =
+				(
+					CropDragRect = undefined
+					CropPreview.Capture = false
+					local image = CropPreview.Image
+					CropPreview.Image = undefined
+					if image != undefined do image.Dispose()
+					if CropPreviewSource != undefined do CropPreviewSource.Dispose()
+					CropPreviewSource = undefined
+				)
+
+				fn UpdateCropPreview =
+				(
+					if LoadingCrop or CropPreviewSource == undefined do return()
+					local res = dFile_GetImageRes()
+					local valid = CropLeft.value + CropWidth.value <= res.x and CropTop.value + CropHeight.value <= res.y
+					ApplyCrop.enabled = valid
+					CropHint.text = if valid then "黄色框内保留，暗色区域裁掉" else "区域超出原图，请调整参数"
+					local image = dotNetObject "System.Drawing.Bitmap" CropPreviewSource
+					local w = image.Width
+					local h = image.Height
+					local left = (CropLeft.value * w / res.x) as integer
+					local top = (CropTop.value * h / res.y) as integer
+					local right = amin #(w,((CropLeft.value + CropWidth.value) * w / res.x) as integer)
+					local bottom = amin #(h,((CropTop.value + CropHeight.value) * h / res.y) as integer)
+					local graphics = (dotNetClass "System.Drawing.Graphics").FromImage image
+					local shade = dotNetObject "System.Drawing.SolidBrush" (DNColor.FromArgb 150 0 0 0)
+					graphics.FillRectangle shade 0 0 w top
+					graphics.FillRectangle shade 0 bottom w (h-bottom)
+					graphics.FillRectangle shade 0 top left (bottom-top)
+					graphics.FillRectangle shade right top (w-right) (bottom-top)
+					local borderColor = if valid then DNColor.Yellow else DNColor.Red
+					local pen = dotNetObject "System.Drawing.Pen" borderColor 2.0
+					graphics.DrawRectangle pen left top (amax #(1,right-left-1)) (amax #(1,bottom-top-1))
+					pen.Dispose()
+					shade.Dispose()
+					graphics.Dispose()
+					local previous = CropPreview.Image
+					CropPreview.Image = image
+					if previous != undefined do previous.Dispose()
+				)
+
+				fn CropMousePoint eventArgs =
+				(
+					local res = dFile_GetImageRes()
+					local x = eventArgs.X - (CropPreview.ClientSize.Width - CropPreviewSource.Width) / 2
+					local y = eventArgs.Y - (CropPreview.ClientSize.Height - CropPreviewSource.Height) / 2
+					[x * res.x / CropPreviewSource.Width,y * res.y / CropPreviewSource.Height]
+				)
+
+				fn CropMouseHit point =
+				(
+					local res = dFile_GetImageRes()
+					local toleranceX = 6.0 * res.x / CropPreviewSource.Width
+					local toleranceY = 6.0 * res.y / CropPreviewSource.Height
+					local left = CropLeft.value
+					local top = CropTop.value
+					local right = left + CropWidth.value
+					local bottom = top + CropHeight.value
+					local edgeX = 0
+					local edgeY = 0
+					if point.y >= top-toleranceY and point.y <= bottom+toleranceY do
+					(
+						if abs (point.x-left) <= toleranceX then edgeX = -1
+						else if abs (point.x-right) <= toleranceX do edgeX = 1
+					)
+					if point.x >= left-toleranceX and point.x <= right+toleranceX do
+					(
+						if abs (point.y-top) <= toleranceY then edgeY = -1
+						else if abs (point.y-bottom) <= toleranceY do edgeY = 1
+					)
+					#(edgeX,edgeY,point.x >= left and point.x <= right and point.y >= top and point.y <= bottom)
+				)
+
+				on CropPreview MouseDown sender eventArgs do
+				(
+					if eventArgs.Button.ToString() != "Left" or CropPreviewSource == undefined or not ApplyCrop.enabled do return()
+					local point = CropMousePoint eventArgs
+					local hit = CropMouseHit point
+					if hit[1] == 0 and hit[2] == 0 and not hit[3] do return()
+					CropDragRect = #(CropLeft.value,CropTop.value,CropWidth.value,CropHeight.value)
+					CropDragStart = point
+					CropDragEdges = hit
+					sender.Capture = true
+				)
+
+				on CropPreview MouseMove sender eventArgs do
+				(
+					if CropPreviewSource == undefined do return()
+					local point = CropMousePoint eventArgs
+					if CropDragRect == undefined then
+					(
+						local hit = CropMouseHit point
+						local cursors = dotNetClass "System.Windows.Forms.Cursors"
+						sender.Cursor = if hit[1] != 0 and hit[2] != 0 then
+							(if hit[1] == hit[2] then cursors.SizeNWSE else cursors.SizeNESW)
+						else if hit[1] != 0 then cursors.SizeWE
+						else if hit[2] != 0 then cursors.SizeNS
+						else if hit[3] then cursors.SizeAll else cursors.Default
+					)
+					else
+					(
+						local res = dFile_GetImageRes()
+						local dx = (point.x-CropDragStart.x) as integer
+						local dy = (point.y-CropDragStart.y) as integer
+						local left = CropDragRect[1]
+						local top = CropDragRect[2]
+						local right = left + CropDragRect[3]
+						local bottom = top + CropDragRect[4]
+						if CropDragEdges[1] == 0 and CropDragEdges[2] == 0 then
+						(
+							left = amin #(res.x-CropDragRect[3],amax #(0,left+dx))
+							top = amin #(res.y-CropDragRect[4],amax #(0,top+dy))
+							right = left + CropDragRect[3]
+							bottom = top + CropDragRect[4]
+						)
+						else
+						(
+							if CropDragEdges[1] == -1 do left = amin #(right-1,amax #(0,left+dx))
+							if CropDragEdges[1] == 1 do right = amax #(left+1,amin #(res.x,right+dx))
+							if CropDragEdges[2] == -1 do top = amin #(bottom-1,amax #(0,top+dy))
+							if CropDragEdges[2] == 1 do bottom = amax #(top+1,amin #(res.y,bottom+dy))
+						)
+						LoadingCrop = true
+						CropLeft.value = left
+						CropTop.value = top
+						CropWidth.value = right-left
+						CropHeight.value = bottom-top
+						LoadingCrop = false
+						UpdateCropPreview()
+					)
+				)
+
+				on CropPreview MouseUp sender eventArgs do
+				(
+					if eventArgs.Button.ToString() == "Left" do
+					(
+						CropDragRect = undefined
+						sender.Capture = false
+					)
+				)
+				on CropPreview MouseCaptureChanged sender eventArgs do
+				(
+					if not sender.Capture do CropDragRect = undefined
+				)
+
+				fn LoadCrop =
+				(
+					LoadingCrop = true
+					FreeCropPreview()
+					local loaded = dFile_GetImageCount() > 0 and m_PlayerMode == MODE_PLAYER_NORMAL
+					for control in #(CropLeft,CropTop,CropWidth,CropHeight,ApplyCrop,ResetCrop) do control.enabled = loaded
+					if not loaded do
+					(
+						CropSource.text = "请先打开图片序列"
+						LoadingCrop = false
+						return()
+					)
+					local res = dFile_GetImageRes()
+					local rect = dFile_GetCrop()
+					if rect == undefined do rect = #(0,0,res.x,res.y)
+					CropSource.text = "原图: " + ((res.x as integer) as string) + " × " + ((res.y as integer) as string)
+					CropLeft.range = [0,res.x-1,rect[1]]
+					CropTop.range = [0,res.y-1,rect[2]]
+					CropWidth.range = [1,res.x,rect[3]]
+					CropHeight.range = [1,res.y,rect[4]]
+					local file = (dFile_GetImageDatas())[cTime_GetCurrTimeImgIndex()].ImageFile
+					local source = (dotNetClass "System.Drawing.Image").FromFile file
+					local scale = amin #(CropPreview.ClientSize.Width as float / source.Width,CropPreview.ClientSize.Height as float / source.Height)
+					local width = amax #(1,(source.Width * scale) as integer)
+					local height = amax #(1,(source.Height * scale) as integer)
+					CropPreviewSource = dotNetObject "System.Drawing.Bitmap" source width height
+					source.Dispose()
+					LoadingCrop = false
+					UpdateCropPreview()
+				)
+
+				on CropLeft changed value do UpdateCropPreview()
+				on CropTop changed value do UpdateCropPreview()
+				on CropWidth changed value do UpdateCropPreview()
+				on CropHeight changed value do UpdateCropPreview()
+
+				on ApplyCrop pressed do
+				(
+					if cDisplay_SetCrop #(CropLeft.value,CropTop.value,CropWidth.value,CropHeight.value) then
+						LoadCrop()
+					else
+						messageBox "裁剪区域超出原图，请检查左、上、宽、高。" title:"序列裁剪"
+				)
+				on ResetCrop pressed do
+				(
+					if cDisplay_SetCrop undefined do LoadCrop()
 				)
 				
 				fn Load =
@@ -5659,6 +5938,8 @@
 
 				on PlayerSetting_Rollout open do
 				(
+					CropPreview.BackColor = DNColor.FromArgb 35 35 35
+					CropPreview.SizeMode = PictureBoxSizeMode.CenterImage
 					local GroupCtrls = for ctrl in PlayerSetting_Rollout.controls where classof ctrl == GroupStartControl collect ctrl
 					GroupCtrls[1].Text = SETTING_PLAYER_RAM_GROUP
 					GroupCtrls[2].Text = SETTING_PLAYER_OPACITY_GROUP
@@ -5666,10 +5947,12 @@
 					Opacity.value = cDisplay_GetOpacity() * 100
 					
 					Load();UpdateUI()
+					LoadCrop()
 				)
 				
 				on PlayerSetting_Rollout close do
 				(
+					FreeCropPreview()
 					Save()
 				)
 
@@ -5955,6 +6238,7 @@
 					
 				menuItem SetOriginalRes "SetOriginalRes"    --"原始分辨率"
 				menuItem FillViewport   "FillViewport" --"覆盖视口"
+				menuItem CropSequence "序列裁剪..."
 				
 				separator sp1-------------------------------
 				
@@ -5983,6 +6267,7 @@
 				on SetOriginalRes picked do  uifn_ResizeToRatio 1
             
 				on FillViewport picked do cDisplay_FillViewport()
+				on CropSequence picked do uifn_OpenSetting open:#Player hwnd:ui_PlayerWindow.Handle
 				
 				on rcMenu_Display open do 
 				(
