@@ -105,7 +105,96 @@ class Test
         CheckResizeLinks();
         CheckCornerResize();
         CheckBatchLayout();
+        CheckSharedSettings();
+        CheckUnifySizes();
         System.Console.WriteLine("PASS: identical window type, no overlay UI, independent/linked movement, resize, per-window close, cleanup");
+    }
+
+    static void CheckSharedSettings()
+    {
+        using (var first = new RefPlayer.PlayerForm())
+        using (var second = new RefPlayer.PlayerForm())
+        using (var closed = new RefPlayer.PlayerForm())
+        {
+            first.JoinGroup(); second.JoinGroup(); closed.JoinGroup();
+            first.LinkedMovement = false;
+            string received = null;
+            int self = 0, updates = 0, stale = 0;
+            first.SharedSettingsChanged += delegate { self++; };
+            second.SharedSettingsChanged += delegate(object sender, System.ComponentModel.PropertyChangedEventArgs args)
+            {
+                Check(sender == second, "Settings events belong to the receiving view");
+                received = args.PropertyName;
+                updates++;
+            };
+            closed.SharedSettingsChanged += delegate { stale++; };
+            closed.Dispose();
+            foreach (string category in new[] { "GridSetting", "RAMSetting", "RecordSetting", "DisplaySetting" })
+            {
+                first.BroadcastSettings(category);
+                Check(received == category, "All shared categories reach other windows while movement is unlinked");
+            }
+            Check(updates == 4 && self == 0 && stale == 0, "Settings do not echo to the source or reach closed windows");
+            second.BroadcastSettings("GridSetting");
+            Check(self == 1 && updates == 4, "Settings can be changed from either window");
+        }
+        System.Console.WriteLine("PASS: immediate shared-setting notifications, independent movement, per-category updates, closed-window cleanup");
+    }
+
+    static void CheckUnifySizes()
+    {
+        using (var first = new RefPlayer.PlayerForm())
+        using (var second = new RefPlayer.PlayerForm())
+        using (var third = new RefPlayer.PlayerForm())
+        using (var below = new RefPlayer.PlayerForm())
+        {
+            first.LinkedMovement = false;
+            var group = new[] { first, second, third, below };
+            foreach (var view in group)
+            {
+                view.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
+                view.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
+                view.JoinGroup();
+            }
+            first.Bounds = new System.Drawing.Rectangle(100, 100, 400, 300);
+            second.Bounds = new System.Drawing.Rectangle(512, 100, 200, 160);
+            third.Bounds = new System.Drawing.Rectangle(724, 100, 600, 500);
+            below.Bounds = new System.Drawing.Rectangle(100, 412, 250, 200);
+            foreach (var view in group) { var handle = view.Handle; }
+            int updates = 0;
+            second.LinkedResized += delegate { updates++; };
+            int partialLayouts = 0;
+            foreach (var view in group) view.Layout += delegate
+            {
+                foreach (var peer in group) if (peer.Size != first.Size) { partialLayouts++; break; }
+            };
+            var firstBounds = first.Bounds;
+            third.UnifySizesToFirst();
+            Check(partialLayouts == 0, "All real windows reach equal sizes before layout callbacks run");
+            foreach (var view in group) Check(view.Size == first.Size, "Unify from any middle menu always uses the first view");
+            Check(first.Bounds == firstBounds && !first.LinkedMovement, "Keep first-view bounds and the manual unlink setting");
+            Check(second.Left - first.Right == 12 && third.Left - second.Right == 12 && below.Top - first.Bottom == 12,
+                "Keep horizontal and vertical edge gaps after equalizing different sizes");
+            Check(updates == 1, "Refresh the resized reference display state");
+            var unchanged = third.Bounds;
+            second.UnifySizesToFirst();
+            Check(third.Bounds == unchanged && updates == 1, "Repeated equalization is stable");
+            second.Size = new System.Drawing.Size(300, 200);
+            second.SuspendLinkedResize = true;
+            first.LinkedMovement = true;
+            var folded = second.Bounds;
+            below.UnifySizesToFirst();
+            Check(second.Bounds == folded && first.LinkedMovement, "Leave minimized windows and the link setting unchanged");
+            second.SuspendLinkedResize = false;
+            third.UnifySizesToFirst();
+            Check(second.Size == first.Size && first.Bounds == firstBounds, "Unify while linked without scaling the leader");
+            first.SuspendLinkedResize = true;
+            Check(!third.CanUnifySizes, "Disable equalization while the first view is minimized");
+            var before = third.Bounds;
+            third.UnifySizesToFirst();
+            Check(third.Bounds == before, "A minimized leader cannot spread its folded size");
+        }
+        System.Console.WriteLine("PASS: one-click first-view dimensions, 4-view spacing, linked/unlinked operation, repeated use, minimized-window isolation");
     }
 
     static void CheckResizeLinks()
@@ -335,6 +424,19 @@ def main():
     assert 'menuItem AddReferenceView "新增参考窗口"' in script
     assert 'on AddReferenceView picked do RPSession.CreateView beside:ui_PlayerWindow' in script
     assert 'LinkReferenceViews.checked = ui_PlayerWindow.LinkedMovement' in script
+    assert 'menuItem UnifyReferenceSizes "统一为视图一大小"' in script
+    assert 'on UnifyReferenceSizes picked do ui_PlayerWindow.UnifySizesToFirst()' in script
+    assert 'UnifyReferenceSizes.enabled = ui_PlayerWindow.CanUnifySizes' in script
+    assert 'sharedIniFile = pathConfig.appendPath (getdir #plugcfg) "RefPlayer2020.ini"' in script
+    assert 'getINISetting (FileFor InputStruct) Category prop' in script
+    assert 'setINISetting (FileFor InputStruct) Category prop' in script
+    assert 'if ApplyingSharedSettings do return()' in script
+    assert re.search(r'catch\s*\(\s*ApplyingSharedSettings = false\s*throw\(\)\s*\)', script), \
+        'MAXScript catch must reset the sharing guard and rethrow without arguments'
+    assert '#SharedSettingsChanged' in script
+    for category in ('RAMSetting', 'RecordSetting', 'GridSetting', 'DisplaySetting'):
+        assert f'"{category}":' in script
+    assert script.index('#SharedSettingsChanged') < script.rindex('RP_Start()')
     assert 'FormBorderStyle = ui_PlayerWindow.FormBorderStyle.None' in script
     assert 'popUpMenu rcMenu_Time' in script and 'popUpMenu rcMenu_Display' in script
     assert 'cDisplay_ScaleToRatio 1' in script and 'if RP_OpenFile folderPath do' in script

@@ -10,7 +10,8 @@
             默认开启中键菜单中的“联动移动/缩放”，拖动或缩放任意窗口时其他窗口同步变化
             缩放时保持窗口边缘间距；新参考图优先匹配已加载视图的窗口尺寸，图像保持比例完整显示
             取消勾选可单独摆放；每个窗口独立关闭，所有视图随Max时间轴同步播放
-            各窗口的图片缓存、裁剪和设置独立；其他视图设置保存至RefPlayer2020_View编号.ini
+            参考线、透明度、置顶、内存和录制设置即时共享；图片缓存、裁剪、起始帧和摆放位置独立
+            中键菜单“统一为视图一大小”可一次统一各窗口尺寸，保留边缘间距和当前联动开关
 
     打开图片序列:
             拖拽文件夹/图像文件到播放窗口
@@ -436,7 +437,8 @@
         local TimeSetting_Rollout
 		local GridSetting_Rollout
         
-		local s_Grid,s_Player,s_PlayList,s_RAM,s_Recorder
+		local s_Grid,s_Player,s_PlayList,s_RAM,s_Recorder,s_Display
+        local ApplyingSharedSettings = false
 		----------------------------
 		--- Initailze Finalize -----
         ----------------------------
@@ -1304,6 +1306,16 @@
             Enabled,Color,Opacity,HorizontalCount,VerticalCount
         )
 
+        struct RefPlayer_DisplaySetting
+        (
+            Category = "DisplaySetting",
+            Opacity,AlwaysOnTop
+        )
+
+        local SharedOpacity = 1.0
+        local SharedAlwaysOnTop = false
+        s_Display = RefPlayer_DisplaySetting Opacity:&SharedOpacity AlwaysOnTop:&SharedAlwaysOnTop
+
         s_PlayList = RefPlayer_PlayListSetting()
         s_Player   = RefPlayer_PlayerSetting()
         s_RAM      = RefPlayer_RAMSetting()
@@ -1323,6 +1335,11 @@
             ),
             
             iniFile = GetIniFile(),
+            sharedIniFile = pathConfig.appendPath (getdir #plugcfg) "RefPlayer2020.ini",
+
+            fn IsShared category = (findItem #("RAMSetting","RecordSetting","GridSetting","DisplaySetting") category) > 0,
+
+            fn FileFor InputStruct = if IsShared InputStruct.category then sharedIniFile else iniFile,
             
             fn ReadValFrom PropVal_string =
             (
@@ -1345,7 +1362,7 @@
                 for prop in (GetSavingProp InputStruct) do 
                 (
                     PropertyToLoad = GetProperty InputStruct prop
-                    PropVal_string = getINISetting iniFile Category prop
+                    PropVal_string = getINISetting (FileFor InputStruct) Category prop
                     
                     if ReadValFrom PropVal_string != undefined do 
                     (
@@ -1356,14 +1373,16 @@
             
             fn Save InputStruct =
             (
+                if ApplyingSharedSettings do return()
                 Category = InputStruct.category
                 
                 for prop in (GetSavingProp InputStruct) do 
                 (
                     PropertyToSave = GetProperty InputStruct prop
                     
-                    setINISetting iniFile Category prop (*PropertyToSave as string)
+                    setINISetting (FileFor InputStruct) Category prop (*PropertyToSave as string)
                 )
+                if (IsShared Category) and ui_PlayerWindow != undefined do ui_PlayerWindow.BroadcastSettings Category
             )
         )
 
@@ -2379,6 +2398,45 @@
                     public bool clickThrough = false;
                     public bool HasSequence, SuspendLinkedResize;
                     public event EventHandler LinkedResized;
+                    public event System.ComponentModel.PropertyChangedEventHandler SharedSettingsChanged;
+
+                    public void BroadcastSettings(string category)
+                    {
+                        foreach (PlayerForm view in views.ToArray())
+                        {
+                            if (view == this || view.IsDisposed) continue;
+                            var handler = view.SharedSettingsChanged;
+                            if (handler != null) handler(view, new System.ComponentModel.PropertyChangedEventArgs(category));
+                        }
+                    }
+
+                    public bool CanUnifySizes { get { return views.Count > 1 && !views[0].SuspendLinkedResize; } }
+
+                    public void UnifySizesToFirst()
+                    {
+                        if (!CanUnifySizes || changingGroup) return;
+                        PlayerForm[] group = views.FindAll(delegate(PlayerForm v) { return !v.SuspendLinkedResize; }).ToArray();
+                        var old = new Rectangle[group.Length];
+                        var sizes = new Size[group.Length];
+                        for (int i = 0; i < group.Length; i++)
+                        {
+                            old[i] = group[i].Bounds;
+                            sizes[i] = group[0].Size;
+                        }
+                        int[] left = ReflowAxis(old, sizes, 0, true, old[0].Left);
+                        int[] top = ReflowAxis(old, sizes, 0, false, old[0].Top);
+                        var bounds = new Rectangle[group.Length];
+                        for (int i = 0; i < group.Length; i++)
+                            bounds[i] = new Rectangle(new Point(left[i], top[i]), sizes[i]);
+                        changingGroup = true;
+                        try
+                        {
+                            ApplyGroupBounds(group, bounds);
+                            for (int i = 0; i < group.Length; i++)
+                                if (old[i].Size != group[i].Size) group[i].NotifyLinkedResize();
+                        }
+                        finally { changingGroup = false; }
+                    }
                     public int ViewCount { get { return views.Count; } }
                     public bool LinkedMovement
                     {
@@ -2783,6 +2841,12 @@
 
 			s_Player.pos_x = &ui_PlayerWindow.Location.X
 			s_Player.pos_y = &ui_PlayerWindow.Location.Y
+
+            SharedOpacity = ui_PlayerWindow.Opacity
+            SharedAlwaysOnTop = ui_PlayerWindow.TopMost
+            SettingCtrl.Load s_Display
+            ui_PlayerWindow.Opacity = SharedOpacity
+            ui_PlayerWindow.TopMost = SharedAlwaysOnTop
 
 
 			/*  PlayerToolStrip  */
@@ -4747,6 +4811,8 @@
 			fn cDisplay_ToggleAlwaysOnTop = 
 			(
 				ui_PlayerWindow.TopMost = not ui_PlayerWindow.TopMost
+                SharedAlwaysOnTop = ui_PlayerWindow.TopMost
+                SettingCtrl.Save s_Display
 				local Des = if ui_PlayerWindow.TopMost then PLAYER_ALWAYS_ON_TOP_ON else PLAYER_ALWAYS_ON_TOP_OFF
 				
 				uifn_SetTempPlayerDes Des duration:700
@@ -4757,6 +4823,8 @@
 			fn cDisplay_SetOpacity opacity = 
 			(
 				ui_PlayerWindow.Opacity = opacity
+                SharedOpacity = opacity
+                SettingCtrl.Save s_Display
 				local Des = PLAYER_OPACITY + ((opacity * 100) as integer) as string + "%"
 				uifn_SetTempPlayerDes Des duration:700
 			)
@@ -5626,7 +5694,6 @@
                 MaxTickCount = 40,
                 
                 TickCount = 0,
-                PlayerOpacity,
                 PlayerTargetOp,
                 RecordTargetOp,
                 
@@ -5693,8 +5760,6 @@
 
                 function PlayerToRecorder =
                 (
-                    PlayerOpacity = PlayerWindow.Opacity
-                    
                     PlayerTargetOp = 0
                     RecordTargetOp = 1
                     
@@ -5705,7 +5770,7 @@
 
                 function RecorderToPlayer =
                 (
-                    PlayerTargetOp = PlayerOpacity
+                    PlayerTargetOp = SharedOpacity
                     RecordTargetOp = 0
                     
                     SetPlayerRect()
@@ -6359,6 +6424,7 @@
 					--*s_Grid.LineWidth       = LineWidth.value
 					*s_Grid.Color       = GridColor.color
 
+                    SettingCtrl.Save s_Grid
                     cDisplay_UpdateGrid()
 				)
 
@@ -6506,6 +6572,7 @@
 					
                 menuItem AddReferenceView "新增参考窗口"
                 menuItem LinkReferenceViews "联动移动/缩放"
+                menuItem UnifyReferenceSizes "统一为视图一大小"
                 separator spViews
 
 				menuItem SetOriginalRes "SetOriginalRes"    --"原始分辨率"
@@ -6529,6 +6596,7 @@
 
                 on AddReferenceView picked do RPSession.CreateView beside:ui_PlayerWindow
                 on LinkReferenceViews picked do ui_PlayerWindow.LinkedMovement = not ui_PlayerWindow.LinkedMovement
+                on UnifyReferenceSizes picked do ui_PlayerWindow.UnifySizesToFirst()
 
 				on SetOpacity1 picked do cDisplay_SetOpacity 1
 				on SetOpacity2 picked do cDisplay_SetOpacity 0.75
@@ -6547,6 +6615,7 @@
 				on rcMenu_Display open do
 				(
                     LinkReferenceViews.checked = ui_PlayerWindow.LinkedMovement
+                    UnifyReferenceSizes.enabled = ui_PlayerWindow.CanUnifySizes
                     local hasSequence = m_PlayerMode == MODE_PLAYER_NORMAL
                     for item in #(SetOriginalRes,FillViewport,CropSequence,GridLine) do item.enabled = hasSequence
 					SetOriginalRes.Text = PLAYER_ORIGINALRES
@@ -6621,6 +6690,55 @@
 
 	)
 	
+    dotnet.addEventHandler ui_PlayerWindow #SharedSettingsChanged (fn _SharedSettingsChanged sender eventArgs =
+    (
+        if IsQuiting do return()
+        ApplyingSharedSettings = true
+        try
+        (
+            case eventArgs.PropertyName of
+            (
+                "RAMSetting":
+                (
+                    SettingCtrl.Load s_RAM
+                    if PlayerSetting_Rollout.hwnd != undefined and PlayerSetting_Rollout.hwnd != 0 do
+                    (
+                        PlayerSetting_Rollout.Load()
+                        PlayerSetting_Rollout.UpdateUI()
+                    )
+                )
+                "RecordSetting":
+                (
+                    SettingCtrl.Load s_Recorder
+                    if RecordSetting_Rollout.hwnd != undefined and RecordSetting_Rollout.hwnd != 0 do
+                    (
+                        RecordSetting_Rollout.Load()
+                        RecordSetting_Rollout.UpdateDescriptionLabel()
+                    )
+                )
+                "GridSetting":
+                (
+                    SettingCtrl.Load s_Grid
+                    cDisplay_UpdateGrid()
+                    if GridSetting_Rollout.hwnd != undefined and GridSetting_Rollout.hwnd != 0 do GridSetting_Rollout.Load()
+                )
+                "DisplaySetting":
+                (
+                    SettingCtrl.Load s_Display
+                    ui_PlayerWindow.Opacity = SharedOpacity
+                    ui_PlayerWindow.TopMost = SharedAlwaysOnTop
+                    if PlayerSetting_Rollout.hwnd != undefined and PlayerSetting_Rollout.hwnd != 0 do PlayerSetting_Rollout.Opacity.value = SharedOpacity * 100
+                )
+            )
+        )
+        catch
+        (
+            ApplyingSharedSettings = false
+            throw()
+        )
+        ApplyingSharedSettings = false
+    ))
+
 	RP_Start()
     append RPSession.CloseCallbacks RP_Quit
 
