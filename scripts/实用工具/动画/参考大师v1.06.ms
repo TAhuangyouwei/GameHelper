@@ -1,7 +1,13 @@
-/******** 功能说明 ********\
+﻿/******** 功能说明 ********\
 
 	提供图片序列播放和录制功能,支持Max2011或以上
 
+
+    多视图:
+            默认两个拖拽区，分别拖入各视角的图片或文件夹
+            右上角“＋视图”可继续添加；所有视图随Max时间轴同步播放
+            较短序列在末尾保持最后一帧；原有裁剪、历史、Gif等功能作用于视图1
+            新增视图只保留当前帧，不会预加载整个序列；关闭后需重新拖入
 
     打开图片序列:
             拖拽文件夹/图像文件到播放窗口
@@ -343,7 +349,7 @@
 		--------- Setting  ---------
         ----------------------------
 
-        local RPVersion /* 版本信息 */  = "V 1.06"
+        local RPVersion /* 版本信息 */  = "V1.06 MV"
 		local RPAllowMultiple    /* 允许多个运行 */  = off
 
 		--[录制模式]:
@@ -382,6 +388,7 @@
         ----------------------------
 
         local Icons
+        local RPAssembly, RPNamespace, RP_TypeName
 		local SettingCtrl -- Load,Save
 
 		----------------------------
@@ -507,6 +514,7 @@
 		local dFile_GetImageLoadRes
 		local dFile_GetImageRes
 		local dFile_GetCrop
+        local dDisplay_GetCanvasRes
         local dDisplay_GetScaleRatio
 		local dDisplay_SetScaleRatio
 		local dDisplay_SetLoadRes
@@ -1153,6 +1161,8 @@
 
         fn RP_Update =
 		(
+            if m_PlayerMode != MODE_PLAYER_MINIMIZED do
+                ui_PlayerWindow.UpdateExtraViews (((currentTime.frame + 1 - dTime_GetStartTime()) * dTime_GetPlayerFps() / frameRate) as integer)
 			if m_PlayerMode == MODE_PLAYER_NORMAL do(
 				
 				local index = cTime_GetCurrTimeImgIndex()
@@ -1190,7 +1200,7 @@
 			/* Debug */Debug_LogTime "Start:InitRegisterEvents"
 
             local thePtr  = DotNetObject "System.IntPtr" (windows.getMAXHWND())
-            local theHwnd = DotNetObject "RefPlayer.Win32HandleWrapper" thePtr
+            local theHwnd = DotNetObject (RP_TypeName "Win32HandleWrapper") thePtr
             ui_PlayerWindow.Show(theHwnd)	
 			
 
@@ -1198,6 +1208,7 @@
 			/* Debug */Debug_LogTime "Start:ShowPlayerForm"
 			SettingCtrl.Load s_Player
 
+            ui_PlayerWindow.InitializeViews ui_PlayerPictureBox ScaleFactor
             RegisterTimeCallBack RP_Update
 
 			if not RPAllowMultiple do
@@ -1357,6 +1368,9 @@
     )
 
 	(---- C# Code  ----
+        local rpGuidClass = dotnetclass "System.Guid"
+        local rpRunGuid = rpGuidClass.NewGuid()
+        RPNamespace = "RefPlayerMV_" + (rpRunGuid.ToString "N")
 		fn CompileCSharpCode =
 		(
 			RecorderForm =
@@ -2223,12 +2237,179 @@
             "
             using System;
             using System.Windows.Forms;
+            using System.Drawing;
+            using System.IO;
+            using System.Collections.Generic;
 
             namespace RefPlayer
             {
+                public class SequenceView : PictureBoxEx
+                {
+                    private string[] files = new string[0];
+                    private int displayed = -1;
+                    private string folder;
+                    private int viewNumber;
+
+                    public SequenceView(int number)
+                    {
+                        viewNumber = number;
+                        BackColor = Color.FromArgb(40, 40, 40);
+                        ForeColor = Color.Gray;
+                        SizeMode = PictureBoxSizeMode.Zoom;
+                    }
+
+                    public void LoadFolder(string path, int frame)
+                    {
+                        List<string> found = new List<string>();
+                        foreach (string file in Directory.GetFiles(path))
+                        {
+                            string ext = Path.GetExtension(file);
+                            if (String.Equals(ext, \".png\", StringComparison.OrdinalIgnoreCase) ||
+                                String.Equals(ext, \".jpg\", StringComparison.OrdinalIgnoreCase)) found.Add(file);
+                        }
+                        found.Sort(StringComparer.OrdinalIgnoreCase);
+                        if (found.Count == 0) throw new IOException(\"文件夹中没有 PNG/JPG 图片。\");
+                        string[] next = found.ToArray();
+                        int index = Math.Max(0, Math.Min(next.Length - 1, frame - 1));
+                        Bitmap image = ReadFrame(next[index]);
+                        Image old = Image;
+                        Image = image;
+                        files = next;
+                        folder = path;
+                        displayed = index;
+                        if (old != null) old.Dispose();
+                        Invalidate();
+                    }
+
+                    private static Bitmap ReadFrame(string path)
+                    {
+                        using (Image source = Image.FromFile(path)) return new Bitmap(source);
+                    }
+
+                    public void UpdateFrame(int frame)
+                    {
+                        if (files.Length == 0) return;
+                        int index = Math.Max(0, Math.Min(files.Length - 1, frame - 1));
+                        if (index == displayed) return;
+                        try
+                        {
+                            Bitmap image = ReadFrame(files[index]);
+                            Image old = Image;
+                            Image = image;
+                            displayed = index;
+                            if (old != null) old.Dispose();
+                            Invalidate();
+                        }
+                        catch (Exception ex)
+                        {
+                            // Report once; keep the current image if the file disappeared.
+                            files = new string[0];
+                            MessageBox.Show(ex.Message, \"视图 \" + viewNumber);
+                        }
+                    }
+
+                    protected override void OnPaint(PaintEventArgs e)
+                    {
+                        base.OnPaint(e);
+                        using (Pen pen = new Pen(Color.FromArgb(90, 90, 90)))
+                        {
+                            pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                            e.Graphics.DrawRectangle(pen, 6, 6, Math.Max(1, Width - 13), Math.Max(1, Height - 13));
+                        }
+                        string title = \"视图 \" + viewNumber;
+                        if (Image == null)
+                            title += \"\\n\\n拖拽区\\n拖入图片或序列文件夹\";
+                        else title += \"  \" + (displayed + 1) + \"/\" + files.Length + \"  \" + Path.GetFileName(folder);
+                        TextRenderer.DrawText(e.Graphics, title, Font, new Rectangle(12, 12, Math.Max(1, Width - 24), Math.Max(1, Height - 24)), ForeColor,
+                            Image == null ? TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter : TextFormatFlags.Top | TextFormatFlags.EndEllipsis);
+                    }
+
+                    protected override void Dispose(bool disposing)
+                    {
+                        if (disposing && Image != null)
+                        {
+                            Image old = Image;
+                            Image = null;
+                            old.Dispose();
+                        }
+                        base.Dispose(disposing);
+                    }
+                }
+
                 public class PlayerForm : MaxCustomControls.MaxForm
                 {
                     public bool clickThrough = false;
+                    private Control primary;
+                    private List<SequenceView> extraViews = new List<SequenceView>();
+                    private Button addView;
+                    public int ViewCount { get { return extraViews.Count + 1; } }
+
+                    public void InitializeViews(Control firstView, float scale)
+                    {
+                        primary = firstView;
+                        primary.Dock = DockStyle.None;
+                        addView = new Button();
+                        addView.Text = \"＋视图\";
+                        addView.Size = new Size((int)(72 * scale), (int)(26 * scale));
+                        addView.FlatStyle = FlatStyle.Flat;
+                        addView.BackColor = Color.FromArgb(50, 50, 50);
+                        addView.ForeColor = Color.LightGray;
+                        addView.Click += delegate { AddView(); };
+                        Controls.Add(addView);
+                        AddView();
+                    }
+
+                    public void AddView()
+                    {
+                        int columnWidth = Math.Max(1, ClientSize.Width / ViewCount);
+                        SequenceView view = new SequenceView(ViewCount + 1);
+                        extraViews.Add(view);
+                        Controls.Add(view);
+                        Width += columnWidth;
+                        PerformLayout();
+                    }
+
+                    protected override void OnLayout(LayoutEventArgs e)
+                    {
+                        base.OnLayout(e);
+                        if (primary == null) return;
+                        int width = ClientSize.Width / ViewCount;
+                        primary.Bounds = new Rectangle(0, 0, width, ClientSize.Height);
+                        for (int i = 0; i < extraViews.Count; i++)
+                        {
+                            int left = (i + 1) * width;
+                            int right = i == extraViews.Count - 1 ? ClientSize.Width : left + width;
+                            extraViews[i].Bounds = new Rectangle(left, 0, Math.Max(1, right - left), ClientSize.Height);
+                        }
+                        if (addView != null)
+                        {
+                            addView.Location = new Point(Math.Max(0, ClientSize.Width - addView.Width - 8), 8);
+                            addView.BringToFront();
+                        }
+                    }
+
+                    public int ViewAtScreenPoint(int x, int y)
+                    {
+                        Point point = PointToClient(new Point(x, y));
+                        return Math.Min(ViewCount - 1, Math.Max(0, point.X / Math.Max(1, ClientSize.Width / ViewCount)));
+                    }
+
+                    public void LoadExtraView(int index, string folder, int frame)
+                    {
+                        try { extraViews[index - 1].LoadFolder(folder, frame); }
+                        catch (Exception ex) { MessageBox.Show(ex.Message, \"加载序列失败\"); }
+                    }
+
+                    public void SetMultiViewState(bool minimized, bool locked)
+                    {
+                        foreach (SequenceView view in extraViews) view.Visible = !minimized;
+                        if (addView != null) addView.Visible = !minimized && !locked;
+                    }
+
+                    public void UpdateExtraViews(int frame)
+                    {
+                        foreach (SequenceView view in extraViews) view.UpdateFrame(frame);
+                    }
 
                     protected override void WndProc(ref Message m)
                     {
@@ -2298,7 +2479,9 @@
 				if not CompileSucceed do
 				(
 					try(
-						CompilerResults = CSharpProvider.CompileAssemblyFromSource CompilerParams #(RecorderForm,WinAPI,GifCreator,PlayerForm)
+                        local sources = for source in #(RecorderForm,WinAPI,GifCreator,PlayerForm) collect
+                            (substituteString source "namespace RefPlayer" ("namespace " + RPNamespace))
+                        CompilerResults = CSharpProvider.CompileAssemblyFromSource CompilerParams sources
 						CompileSucceed = true
 					)catch(
 						if i == MaxAttemptsCount do throw()
@@ -2315,14 +2498,15 @@
                     ErrorMessage += "\n"			
                     ErrorMessage += CompilerResults.Errors.Item[i-1].ToString()
                 )
-                MessageBox ErrorMessage
+                throw ErrorMessage
             )
 
             CompilerResults.CompiledAssembly
 		)
 
-        if (dotnetclass "RefPlayer.RecordWindow") == undefined do
-			CompileCSharpCode()
+        -- Unique full type names let Max find this compilation without assembly-name resolution or stale types.
+        RPAssembly = CompileCSharpCode()
+        fn RP_TypeName className = RPNamespace + "." + className
 		
 
 		/* Debug */Debug_LogTime "CompileCSharpCode"
@@ -2442,7 +2626,7 @@
 
             /*  PlayerWindow  */
             --ui_PlayerWindow = dotnetobject "MaxCustomControls.MaxForm"
-            ui_PlayerWindow = dotnetobject "RefPlayer.PlayerForm"
+            ui_PlayerWindow = dotnetobject (RP_TypeName "PlayerForm")
             ui_PlayerWindow.BackColor = (dotNetClass "System.Drawing.Color").Black
             ui_PlayerWindow.FormBorderStyle = ui_PlayerWindow.FormBorderStyle.None
             ui_PlayerWindow.AllowDrop = true
@@ -2453,7 +2637,7 @@
 
 			/*  PlayerToolStrip  */
 
-			ui_PlayerToolStrip = dotnetobject "RefPlayer.ToolStripEx"
+			ui_PlayerToolStrip = dotnetobject (RP_TypeName "ToolStripEX")
             ui_PlayerToolStrip.backColor = (dotnetclass "System.Drawing.Color").FromArgb 0 50 50 50
             ui_PlayerToolStrip.ImageScalingSize = dotnetobject "System.Drawing.Size" 20 20
             ui_PlayerToolStrip.Dock =  ui_PlayerToolStrip.Dock.left
@@ -2466,7 +2650,7 @@
 
 			/*  PlayerPictureBox  */
 			
-            ui_PlayerPictureBox = dotnetobject "RefPlayer.PictureBoxEx"
+            ui_PlayerPictureBox = dotnetobject (RP_TypeName "PictureBoxEx")
             ui_PlayerPictureBox.SizeMode = PictureBoxSizeMode.StretchImage
             ui_PlayerPictureBox.Dock     = DockStyle.Fill 
             ui_PlayerPictureBox.AutoSize = false
@@ -2478,7 +2662,7 @@
 
 			/*  GridPictureBox  */
 
-            ui_PlayerGridPictureBox = dotnetobject "RefPlayer.PictureBoxEx"
+            ui_PlayerGridPictureBox = dotnetobject (RP_TypeName "PictureBoxEx")
             ui_PlayerGridPictureBox.BackColor = DNColor.Transparent
             ui_PlayerGridPictureBox.ClientSize = dotnetobject "System.Drawing.Size" ui_PlayerWindow.width ui_PlayerWindow.Height
             ui_PlayerGridPictureBox.SizeMode = PictureBoxSizeMode.StretchImage
@@ -2495,7 +2679,7 @@
 				(
 					/* ToolStrip Shadow Gradient */
 
-					ui_PlayerTSShadow = dotnetobject "RefPlayer.PictureBoxEx"
+					ui_PlayerTSShadow = dotnetobject (RP_TypeName "PictureBoxEx")
 					ui_PlayerTSShadow.BackColor = DNColor.Transparent
 					ui_PlayerTSShadow.Size = dotnetobject "System.Drawing.Size" 100 ui_PlayerWindow.Height
 					ui_PlayerTSShadow.SizeMode = PictureBoxSizeMode.StretchImage
@@ -2671,14 +2855,14 @@
 
 			/*  Recorder Window  */
 
-            ui_RecordWindow = dotnetobject "RefPlayer.RecordWindow"
+            ui_RecordWindow = dotnetobject (RP_TypeName "RecordWindow")
 			
-			ui_RecordToolStrip = dotnetobject "RefPlayer.ToolStripEX"
+			ui_RecordToolStrip = dotnetobject (RP_TypeName "ToolStripEX")
             ui_RecordToolStrip.CanOverflow = false
 			ui_RecordToolStrip.backColor = RGBColor RPRecorderTSColor.r RPRecorderTSColor.g RPRecorderTSColor.b
 			ui_RecordWindow.Controls.Add ui_RecordToolStrip
 			ui_RecordWindow.ToolStrip = ui_RecordToolStrip
-			ui_RecordWindow.formEvents = dotnetobject "RefPlayer.FormEvents" ui_RecordToolStrip ui_RecordWindow
+			ui_RecordWindow.formEvents = dotnetobject (RP_TypeName "FormEvents") ui_RecordToolStrip ui_RecordWindow
 
             
             fn uifn_SetRecorderMinMaxSize =
@@ -2856,7 +3040,7 @@
                     local Point_x = Pos.x + Size.width/2
                     local Point_y = Pos.y + Size.height/2
                     
-					local WinApi  = dotnetclass "RefPlayer.WinApi"
+					local WinApi  = dotnetclass (RP_TypeName "WinApi")
                     local HWnd = WinApi.GetWindowFromPoint point_x point_y
                     local HWndRoot = (windows.getHWNDData HWnd)[7]
 
@@ -3051,11 +3235,13 @@
                 
                 fn uifn_PlayerUINormalMode =
                 (
+                    ui_PlayerWindow.SetMultiViewState false ui_PlayerWindow.clickThrough
                     for c in PlayerTsItems do c.visible = true
                 )
 
                 fn uifn_PlayerUIMinimizedMode =
                 (
+                    ui_PlayerWindow.SetMultiViewState true false
                     for c in PlayerTsItems do c.visible = false
 
                     for c in #(CloseButton,MinimizeButton) do c.visible = true
@@ -3063,6 +3249,7 @@
 
                 fn uifn_PlayerUILockMode =
                 (
+                    ui_PlayerWindow.SetMultiViewState false true
                     for c in PlayerTsItems do c.visible = false
 
                     LockButton.visible = true
@@ -3416,7 +3603,7 @@
 				local Cursors = (dotnetclass "Cursors")
                 local winform = ui_PlayerWindow
 
-				winform.width  = 420 * ScaleFactor
+				winform.width  = 420 * ScaleFactor * ui_PlayerWindow.ViewCount
 				winform.Height = 240 * ScaleFactor
 				winform.BackColor = BackColor
 
@@ -3506,7 +3693,7 @@
 
 				local hwnd = dotnetobject "System.IntPtr" RecordHWnd
 
-				local WinApi  = dotnetclass "RefPlayer.WinApi"
+				local WinApi  = dotnetclass (RP_TypeName "WinApi")
 				WinApi.SetForegroundWindow hwnd
 				--sleep 0.05
 				if AssistType[AssistanceMode] == #Space do 
@@ -3574,7 +3761,7 @@
 					
 					if RecordMouse do 
 					(
-						local WinApi = dotnetclass "RefPlayer.WinApi"
+						local WinApi = dotnetclass (RP_TypeName "WinApi")
 						local CursorPos  = Cursor.Position
 						local x = CursorPos.X - RecordPos.x
 						local y = CursorPos.Y - RecordPos.y
@@ -3624,7 +3811,7 @@
 				(
 					CreateGraphics()
 
-					local WinApi  = dotnetclass "RefPlayer.WinApi"
+					local WinApi  = dotnetclass (RP_TypeName "WinApi")
 					local LastFrameTimeStamp = 0
 
 					while Recording do
@@ -3703,7 +3890,7 @@
 				local Point_x = Pos.x + Size.width/2
 				local Point_y = Pos.y + Size.height/2
 				
-				local WinApi  = dotnetclass "RefPlayer.WinApi"
+				local WinApi  = dotnetclass (RP_TypeName "WinApi")
                 RecordHWnd = WinApi.GetWindowFromPoint point_x point_y
                 local HWndRoot = (windows.getHWNDData RecordHWnd)[7]
 
@@ -3750,6 +3937,7 @@
 			fn dFile_GetCurrFolder = CurrFolder
 			fn dFile_GetImageDatas = ImageDatas
 			fn dFile_GetImageLoadRes = LoadRes
+            fn dDisplay_GetCanvasRes = [(dFile_GetImageLoadRes()).x * ui_PlayerWindow.ViewCount, (dFile_GetImageLoadRes()).y]
 			fn dFile_GetImageRes = ImageRes
 			fn dFile_GetCrop = if CropRect == undefined then undefined else (copy CropRect #noMap)
 
@@ -3910,6 +4098,8 @@
 					return false
 				)
 				
+                sort imagesInPath
+
 				/*  Load New Folder  */
 
 				fFile_SavePlayList();
@@ -4247,7 +4437,7 @@
 					GroupCtrls[3].Text = SETTING_GIF_GENERATE_GROUP
 					GroupCtrls[4].Text = SETTING_GIF_OPEN_GROUP
 					
-					local GifCreator = dotnetclass "RefPlayer.GifCreator"
+					local GifCreator = dotnetclass (RP_TypeName "GifCreator")
 					GifCreator.GIF_INIT_COMPLETE         = GIF_INIT_COMPLETE
 					GifCreator.GIF_PROCESSING_FRAME      = GIF_PROCESSING_FRAME
 					GifCreator.GIF_CACULATE_VALID_REGION = GIF_CACULATE_VALID_REGION
@@ -4287,7 +4477,7 @@
 					GifSaveDir = saveDir
 					GifFullPath = (saveDir + "\\" + GifName + ".gif")	
 					
-                    GifCreator = dotnetclass "RefPlayer.GifCreator"
+                    GifCreator = dotnetclass (RP_TypeName "GifCreator")
                     dotNet.removeAllEventHandlers GifCreator
                     dotnet.addeventHandler GifCreator #SendMessageToMax ShowProg
 
@@ -4306,7 +4496,7 @@
 					)
 						
 					if UseWindowSize then
-						GifCreator.Start files GifFullPath ui_PlayerWindow.Width ui_PlayerWindow.Height
+						GifCreator.Start files GifFullPath ui_PlayerPictureBox.Width ui_PlayerPictureBox.Height
 					else
 						GifCreator.Start files GifFullPath
 
@@ -4367,7 +4557,7 @@
 	(----- Controls ↓ ------
 
 		(---- TimeCtrl ----
-			local _StartTime = 30
+			local _StartTime = 0
 			local _Fps = 30
 
 			fn dTime_GetStartTime = _StartTime
@@ -4533,12 +4723,12 @@
 			fn cDisplay_SetCrop rect =
 			(
 				if m_PlayerMode != MODE_PLAYER_NORMAL do return false
-				local scale = ui_PlayerWindow.Width as float / (dFile_GetImageLoadRes()).x
+				local scale = ui_PlayerPictureBox.Width as float / (dFile_GetImageLoadRes()).x
 				if not (fFile_SetCrop rect) do return false
 				LastDisplayIndex = 0
 				RP_Update()
 				local res = dFile_GetImageLoadRes()
-				local width = amax #(1,(res.x * scale + 0.5) as integer)
+				local width = amax #(1,(res.x * ui_PlayerWindow.ViewCount * scale + 0.5) as integer)
 				local height = amax #(1,(res.y * scale + 0.5) as integer)
 				ui_PlayerWindow.Size = dotNetObject "System.Drawing.Size" width height
 				dDisplay_SetLoadRes res
@@ -4572,7 +4762,7 @@
             (
                 local ViewSize = getviewsize() * ScaleFactor
                 local ViewportPos = (mouse.screenpos - mouse.pos) * ScaleFactor
-				local LoadRes = dFile_GetImageLoadRes()
+				local LoadRes = dDisplay_GetCanvasRes()
 
                 local ratio = LoadRes.x as float/LoadRes.y
                 local viewRatio = ViewSize.x as float /ViewSize.y
@@ -4762,7 +4952,7 @@
 				(
 					if m_PlayerMode == MODE_PLAYER_NORMAL do
 					(
-						this.ImgOriginalRes = dFile_GetImageLoadRes()
+						this.ImgOriginalRes = dDisplay_GetCanvasRes()
 						this.ScaleRatio = ui_PlayerWindow.width as float / ImgOriginalRes.x
 					)
 						
@@ -5028,9 +5218,16 @@
                     local file = (EventArgs.Data.GetData(DataFormats.FileDrop))[1]
                     local folderPath = GetFileFolderPath file
                     
-                    if RP_OpenFile folderPath do
+                    local viewIndex = ui_PlayerWindow.ViewAtScreenPoint EventArgs.X EventArgs.Y
+                    if viewIndex > 0 then
+                    (
+                        local frame = ((currentTime.frame + 1 - dTime_GetStartTime()) * dTime_GetPlayerFps() / frameRate) as integer
+                        ui_PlayerWindow.LoadExtraView viewIndex folderPath frame
+                    )
+                    else if RP_OpenFile folderPath do
 					(
 						dTime_SetStartTime 0
+                        RP_Update()
 						cDisplay_ScaleToRatio 1
 						fFile_SavePlayList()
 					)
