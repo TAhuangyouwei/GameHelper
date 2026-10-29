@@ -14,8 +14,13 @@
             中键菜单“统一为视图一大小”可一次统一各窗口尺寸，保留边缘间距和当前联动开关
 
     打开图片序列:
+            复制图片或图片文件后，单击目标拖拽区，按Ctrl+V可粘贴Pose到当前Max帧，中键菜单也可粘贴
+            在不同帧重复粘贴可建立非连续Pose序列，同一帧再次粘贴会替换；每个Pose保持至下一关键帧
+            中键“Pose 关键帧...”可修改帧位置、移到当前时间或删除，Pose序列在当前参考窗口内保留
             拖拽文件夹/图像文件到播放窗口
             会打开该文件夹中所有*.jpg|*.png格式的图像
+            同名前缀且编号跳帧时自动按关键帧播放：0001、0006、0011对应Max的1、6、11帧，中间保持上一张
+            连续编号文件夹仍使用原来的连续播放；关键帧位置可在中键“Pose 关键帧...”中调整，首张图定位时整组平移并保留间隔
             图像序列的宽高比 以首个文件为标准
             鼠标移到窗口四角显示斜向双箭头，按住左键拖动可等比例缩放，滚轮缩放仍然可用
             四角缩放遵守联动开关；锁定或最小化时不启用，拖动过程中按Esc可取消
@@ -435,9 +440,11 @@
         local RecordSetting_Rollout
         local PlayerSetting_Rollout
         local TimeSetting_Rollout
+        local PoseKeys_Rollout
+        local RP_PasteImage, RP_OpenPoseKeys
 		local GridSetting_Rollout
         
-		local s_Grid,s_Player,s_PlayList,s_RAM,s_Recorder,s_Display
+		local s_Grid,s_Player,s_PlayList,s_RAM,s_Recorder,s_Display,s_Cache
         local ApplyingSharedSettings = false
 		----------------------------
 		--- Initailze Finalize -----
@@ -1169,6 +1176,12 @@
 
         fn RP_Update =
 		(
+            if ui_PlayerWindow.PoseMode do
+            (
+                ui_PlayerPictureBox.image = ui_PlayerWindow.Poses.ImageAt (currentTime.frame as integer)
+                ui_PlayerWindow.Invalidate true
+                return()
+            )
 			if m_PlayerMode == MODE_PLAYER_NORMAL do(
 				
 				local index = cTime_GetCurrTimeImgIndex()
@@ -1225,10 +1238,15 @@
 		(
 			if (fFile_ReadFolder thepath) then
 			(
+                ui_PlayerWindow.ReferenceFolder = thepath
+                ui_PlayerWindow.Poses.Clear()
+                ui_PlayerWindow.NumberedSequence = ui_PlayerWindow.Poses.TryLoadSparseFolder thepath
+                ui_PlayerWindow.PoseMode = ui_PlayerWindow.NumberedSequence
 				if m_PlayerMode == MODE_PLAYER_HOME do uifn_QuitHomePanel()
                 ui_PlayerWindow.HasSequence = true
 				LastDisplayIndex = 0
 				RP_Update()
+                if PoseKeys_Rollout.hwnd != undefined and PoseKeys_Rollout.hwnd != 0 do PoseKeys_Rollout.RefreshKeys()
 				if PlayerSetting_Rollout.hwnd != undefined and PlayerSetting_Rollout.hwnd != 0 do PlayerSetting_Rollout.LoadCrop()
 				--fFile_SavePlayList() /* Keep Ratio When ReLoaded */
 
@@ -1243,6 +1261,7 @@
 			if IsQuiting do return()
 
 			IsQuiting = true
+            try (destroyDialog PoseKeys_Rollout) catch()
             util_StopTimer()
             UnRegisterTimeCallBack RP_Update
 
@@ -1306,6 +1325,14 @@
             Enabled,Color,Opacity,HorizontalCount,VerticalCount
         )
 
+        struct RefPlayer_CacheSetting
+        (
+            Category = "CacheSetting",
+            Directory
+        )
+        local ClipboardCacheRoot = pathConfig.appendPath (getdir #temp) "RefPlayerClipboard"
+        s_Cache = RefPlayer_CacheSetting Directory:&ClipboardCacheRoot
+
         struct RefPlayer_DisplaySetting
         (
             Category = "DisplaySetting",
@@ -1337,7 +1364,7 @@
             iniFile = GetIniFile(),
             sharedIniFile = pathConfig.appendPath (getdir #plugcfg) "RefPlayer2020.ini",
 
-            fn IsShared category = (findItem #("RAMSetting","RecordSetting","GridSetting","DisplaySetting") category) > 0,
+            fn IsShared category = (findItem #("RAMSetting","RecordSetting","GridSetting","DisplaySetting","CacheSetting") category) > 0,
 
             fn FileFor InputStruct = if IsShared InputStruct.category then sharedIniFile else iniFile,
             
@@ -1387,6 +1414,7 @@
         )
 
         SettingCtrl = sSettingCtrl()
+        SettingCtrl.Load s_Cache
 
 		/* Debug */Debug_LogTime "Setting"
     )
@@ -2273,6 +2301,105 @@
 
             namespace RefPlayer
             {
+
+                public sealed class PoseTrack : IDisposable
+                {
+                    private SortedList<int, string> keys = new SortedList<int, string>();
+                    private Image image;
+                    private string imagePath;
+                    public int Count { get { return keys.Count; } }
+                    public int FrameAt(int index) { return keys.Keys[index]; }
+
+                    public bool TryLoadSparseFolder(string folder)
+                    {
+                        var files = new List<string>();
+                        files.AddRange(System.IO.Directory.GetFiles(folder, \"*.png\"));
+                        files.AddRange(System.IO.Directory.GetFiles(folder, \"*.jpg\"));
+                        if (files.Count < 2) return false;
+                        var numbered = new SortedList<int, string>();
+                        string prefix = null;
+                        foreach (string file in files)
+                        {
+                            string name = System.IO.Path.GetFileNameWithoutExtension(file);
+                            var match = System.Text.RegularExpressions.Regex.Match(name, @\"^(.*?)(\\d+)$\");
+                            int number;
+                            if (!match.Success || !Int32.TryParse(match.Groups[2].Value, out number)) return false;
+                            string currentPrefix = match.Groups[1].Value;
+                            if (prefix != null && !String.Equals(prefix, currentPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+                            prefix = currentPrefix;
+                            if (numbered.ContainsKey(number)) return false;
+                            numbered.Add(number, file);
+                        }
+                        bool sparse = false;
+                        for (int i = 1; i < numbered.Count; i++)
+                            if ((long)numbered.Keys[i] - numbered.Keys[i - 1] > 1) sparse = true;
+                        if (!sparse) return false;
+                        Clear();
+                        keys = numbered;
+                        return true;
+                    }
+
+                    public bool SetStartFrame(int frame)
+                    {
+                        if (keys.Count == 0) return false;
+                        long delta = (long)frame - keys.Keys[0];
+                        var shifted = new SortedList<int, string>();
+                        for (int i = 0; i < keys.Count; i++)
+                        {
+                            long target = keys.Keys[i] + delta;
+                            if (target < Int32.MinValue || target > Int32.MaxValue) return false;
+                            shifted.Add((int)target, keys.Values[i]);
+                        }
+                        keys = shifted;
+                        return true;
+                    }
+
+                    public bool UsesFile(string file)
+                    {
+                        foreach (string path in keys.Values)
+                            if (String.Equals(System.IO.Path.GetFullPath(path), file, StringComparison.OrdinalIgnoreCase)) return true;
+                        return false;
+                    }
+                    public void Set(int frame, string file) { keys[frame] = file; }
+                    public bool Move(int oldFrame, int newFrame)
+                    {
+                        if (!keys.ContainsKey(oldFrame) || (oldFrame != newFrame && keys.ContainsKey(newFrame))) return false;
+                        string file = keys[oldFrame];
+                        keys.Remove(oldFrame);
+                        keys[newFrame] = file;
+                        return true;
+                    }
+                    public void Remove(int frame) { keys.Remove(frame); }
+                    public int IndexAt(int frame)
+                    {
+                        if (keys.Count == 0) return -1;
+                        int index = 0;
+                        while (index + 1 < keys.Count && keys.Keys[index + 1] <= frame) index++;
+                        return index;
+                    }
+                    public Image ImageAt(int frame)
+                    {
+                        int index = IndexAt(frame);
+                        if (index < 0) return null;
+                        string path = keys.Values[index];
+                        if (image != null && imagePath == path) return image;
+                        Image next;
+                        using (Image source = Image.FromFile(path)) next = (Image)source.Clone();
+                        if (image != null) image.Dispose();
+                        image = next;
+                        imagePath = path;
+                        return image;
+                    }
+                    public void Clear()
+                    {
+                        keys.Clear();
+                        if (image != null) image.Dispose();
+                        image = null;
+                        imagePath = null;
+                    }
+                    public void Dispose() { Clear(); }
+                }
+
                 public class PlayerForm : MaxCustomControls.MaxForm
                 {
                     private static readonly List<PlayerForm> views = new List<PlayerForm>();
@@ -2329,6 +2456,7 @@
 
                     protected override void OnMouseDown(MouseEventArgs e)
                     {
+                        if (e.Button == MouseButtons.Left && !clickThrough) { Activate(); Focus(); }
                         int corner = HitTestCorner(e.Location);
                         if (e.Button == MouseButtons.Left && corner != 0)
                         {
@@ -2393,6 +2521,130 @@
                             return;
                         }
                         base.OnKeyDown(e);
+                    }
+
+
+                    public string ReferenceFolder;
+                    public bool PoseMode, NumberedSequence;
+                    public readonly PoseTrack Poses = new PoseTrack();
+                    public event EventHandler PasteRequested;
+                    private const int PasteHotKeyId = 0x5250;
+                    private bool pasteHotKeyRegistered;
+                    [System.Runtime.InteropServices.DllImport(\"user32.dll\")]
+                    private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
+                    [System.Runtime.InteropServices.DllImport(\"user32.dll\")]
+                    private static extern bool UnregisterHotKey(IntPtr window, int id);
+
+                    protected override void OnActivated(EventArgs e)
+                    {
+                        base.OnActivated(e);
+                        if (!pasteHotKeyRegistered)
+                            pasteHotKeyRegistered = RegisterHotKey(Handle, PasteHotKeyId, 0x4002, (uint)Keys.V);
+                    }
+                    private void ReleasePasteHotKey()
+                    {
+                        if (pasteHotKeyRegistered && IsHandleCreated) UnregisterHotKey(Handle, PasteHotKeyId);
+                        pasteHotKeyRegistered = false;
+                    }
+                    protected override void OnDeactivate(EventArgs e)
+                    {
+                        ReleasePasteHotKey();
+                        base.OnDeactivate(e);
+                    }
+                    protected override void OnHandleDestroyed(EventArgs e)
+                    {
+                        ReleasePasteHotKey();
+                        base.OnHandleDestroyed(e);
+                    }
+
+
+                    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+                    {
+                        if (keyData == (Keys.Control | Keys.V) && !clickThrough && !SuspendLinkedResize)
+                        {
+                            EventHandler handler = PasteRequested;
+                            if (handler != null)
+                            {
+                                handler(this, EventArgs.Empty);
+                                return true;
+                            }
+                        }
+                        return base.ProcessCmdKey(ref msg, keyData);
+                    }
+
+                    public string CacheClipboard(string root)
+                    {
+                        return CacheClipboardImage(Clipboard.GetDataObject(), root);
+                    }
+
+                    public static string CacheClipboardImage(IDataObject data, string root)
+                    {
+                        if (data == null) return null;
+                        Image image = null;
+                        Image source = data.GetData(DataFormats.Bitmap) as Image;
+                        if (source != null) image = (Image)source.Clone();
+                        else
+                        {
+                            string[] files = data.GetData(DataFormats.FileDrop) as string[];
+                            if (files != null)
+                                foreach (string file in files)
+                                {
+                                    string ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
+                                    if (ext != \".png\" && ext != \".jpg\" && ext != \".jpeg\" && ext != \".bmp\" && ext != \".gif\" && ext != \".tif\" && ext != \".tiff\") continue;
+                                    using (Image original = Image.FromFile(file)) image = (Image)original.Clone();
+                                    break;
+                                }
+                        }
+                        if (image == null) return null;
+                        using (image)
+                        {
+                            string folder = System.IO.Path.Combine(root, Guid.NewGuid().ToString(\"N\"));
+                            System.IO.Directory.CreateDirectory(folder);
+                            try { image.Save(System.IO.Path.Combine(folder, \"clipboard.png\"), System.Drawing.Imaging.ImageFormat.Png); }
+                            catch
+                            {
+                                System.IO.Directory.Delete(folder, true);
+                                throw;
+                            }
+                            return folder;
+                        }
+                    }
+
+
+                    public sealed class CacheCleanupResult
+                    {
+                        public int Deleted, InUse, Failed;
+                    }
+                    public CacheCleanupResult ClearClipboardCache(string root)
+                    {
+                        var result = new CacheCleanupResult();
+                        if (!System.IO.Directory.Exists(root)) return result;
+                        foreach (string folder in System.IO.Directory.GetDirectories(root))
+                        {
+                            Guid id;
+                            if (!Guid.TryParseExact(System.IO.Path.GetFileName(folder), \"N\", out id)) continue;
+                            if ((System.IO.File.GetAttributes(folder) & System.IO.FileAttributes.ReparsePoint) != 0) continue;
+                            string file = System.IO.Path.Combine(folder, \"clipboard.png\");
+                            if (!System.IO.File.Exists(file) || System.IO.Directory.GetFiles(folder).Length != 1 || System.IO.Directory.GetDirectories(folder).Length != 0) continue;
+                            bool inUse = false;
+                            foreach (PlayerForm view in views)
+                            {
+                                if (view.Poses.UsesFile(file) || (!String.IsNullOrEmpty(view.ReferenceFolder) && String.Equals(
+                                    System.IO.Path.GetFullPath(view.ReferenceFolder).TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                                    System.IO.Path.GetFullPath(folder).TrimEnd(System.IO.Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)))
+                                { inUse = true; break; }
+                            }
+                            if (inUse) { result.InUse++; continue; }
+                            try
+                            {
+                                System.IO.File.Delete(file);
+                                System.IO.Directory.Delete(folder);
+                                result.Deleted++;
+                            }
+                            catch (System.IO.IOException) { result.Failed++; }
+                            catch (UnauthorizedAccessException) { result.Failed++; }
+                        }
+                        return result;
                     }
 
                     public bool clickThrough = false;
@@ -2622,12 +2874,22 @@
 
                     protected override void Dispose(bool disposing)
                     {
-                        if (disposing) views.Remove(this);
+                        if (disposing)
+                        {
+                            Poses.Dispose();
+                            views.Remove(this);
+                        }
                         base.Dispose(disposing);
                     }
 
                     protected override void WndProc(ref Message m)
                     {
+                        if (m.Msg == 0x0312 && m.WParam.ToInt32() == PasteHotKeyId)
+                        {
+                            if (!clickThrough && !SuspendLinkedResize && PasteRequested != null) PasteRequested(this, EventArgs.Empty);
+                            m.Result = IntPtr.Zero;
+                            return;
+                        }
                         if (m.Msg == 0x0084 && clickThrough) { m.Result = (IntPtr)(-1); return; }
                         base.WndProc(ref m);
                     }
@@ -2838,6 +3100,7 @@
             ui_PlayerWindow.ConfigureCornerResize ((10*ScaleFactor) as integer) ((RPMinPlayerReslotion.x*ScaleFactor) as integer) ((RPMinPlayerReslotion.y*ScaleFactor) as integer)
             ui_PlayerWindow.FormBorderStyle = ui_PlayerWindow.FormBorderStyle.None
             ui_PlayerWindow.AllowDrop = true
+            ui_PlayerWindow.KeyPreview = true
 
 			s_Player.pos_x = &ui_PlayerWindow.Location.X
 			s_Player.pos_y = &ui_PlayerWindow.Location.Y
@@ -4395,6 +4658,7 @@
 				
 			fn fFile_SavePlayList =
             (
+                if ui_PlayerWindow.PoseMode and not ui_PlayerWindow.NumberedSequence do return()
                 if dFile_GetCurrFolder() == undefined do return(UpdateDropDownItemArray())
 
 				local NewData = GetCurrentPlayingItemData()
@@ -4671,13 +4935,20 @@
 			local _StartTime = 0
 			local _Fps = 30
 
-			fn dTime_GetStartTime = _StartTime
-			fn dTime_SetStartTime val = _StartTime = val
+			fn dTime_GetStartTime = if ui_PlayerWindow.PoseMode and ui_PlayerWindow.Poses.Count > 0 then ui_PlayerWindow.Poses.FrameAt 0 else _StartTime
+            fn dTime_SetStartTime val =
+            (
+                if ui_PlayerWindow.PoseMode and ui_PlayerWindow.Poses.Count > 0 then
+                    ui_PlayerWindow.Poses.SetStartFrame (val as integer)
+                else _StartTime = val
+            )
             fn dTime_GetPlayerFps = _Fps
             fn dTime_SetPlayerFps val = _Fps = val
 
             fn GetSeuqenceRange =
 			(
+                if ui_PlayerWindow.PoseMode and ui_PlayerWindow.Poses.Count > 0 do
+                    return (interval (ui_PlayerWindow.Poses.FrameAt 0) (ui_PlayerWindow.Poses.FrameAt (ui_PlayerWindow.Poses.Count-1)))
 				local start = _StartTime
 				local end   = dFile_GetImageCount() + start
 				
@@ -4686,7 +4957,9 @@
 
 			fn GetProgressString =
 			(
-				PLAYER_TIME_CURRENT + cTime_GetCurrTimeImgIndex() as string + "/" + dFile_GetImageCount() as string
+                if ui_PlayerWindow.PoseMode then
+                    ("Pose " + (((ui_PlayerWindow.Poses.IndexAt (currentTime.frame as integer)) + 1) as string) + "/" + (ui_PlayerWindow.Poses.Count as string))
+                else PLAYER_TIME_CURRENT + cTime_GetCurrTimeImgIndex() as string + "/" + dFile_GetImageCount() as string
 			)
 			
 			fn GetTimeInfoString =
@@ -4708,6 +4981,7 @@
 
 			fn cTime_GetCurrTimeImgIndex =
 			(
+                if ui_PlayerWindow.PoseMode do return ((ui_PlayerWindow.Poses.IndexAt (currentTime.frame as integer)) + 1)
 				local t = ((currentTime.frame + 1 - _StartTime)*_Fps/frameRate) as integer	
 				local ImageCount = dFile_GetImageCount()
 				
@@ -4728,7 +5002,7 @@
 
 			fn cTime_Forward  =
 			(
-				_StartTime += 1
+				dTime_SetStartTime (dTime_GetStartTime() + 1)
 				RP_Update()
 				
 				Des = PLAYER_TIME_FORWARD + GetTimeState()
@@ -4737,7 +5011,7 @@
 			
 			fn cTime_Backward =
 			(
-				_StartTime -= 1
+				dTime_SetStartTime (dTime_GetStartTime() - 1)
 				RP_Update()
 				
 				Des = PLAYER_TIME_BACKWARD + GetTimeState()
@@ -4766,7 +5040,7 @@
 				local range = GetSeuqenceRange()
 				
 				local CurrentFrame =  cTime_GetCurrTimeImgIndex()
-				local FrameCount = (dFile_GetImageDatas()).count
+				local FrameCount = if ui_PlayerWindow.PoseMode then ui_PlayerWindow.Poses.Count else (dFile_GetImageDatas()).count
 				local startFrame = range.start.frame as integer
 				local endFrame   = range.end.frame   as integer
 				
@@ -6016,6 +6290,52 @@
 					slider Opacity  range:[20,100,100] 
 				)
 
+                group "图片缓存目录"
+                (
+                    dotNetControl CachePath "System.Windows.Forms.TextBox" width:235 height:42
+                    button ChooseCache "更改目录" width:75 across:3
+                    button OpenCache "打开目录" width:75
+                    button ClearCache "清理缓存" width:75
+                    label CacheStatus "更改目录仅影响新粘贴的图片，已有缓存不会搬移。" width:235 height:40 align:#left
+                )
+
+                fn LoadCache =
+                (
+                    CachePath.Multiline = true
+                    CachePath.ReadOnly = true
+                    CachePath.Text = ClipboardCacheRoot
+                    CacheStatus.text = "更改目录仅影响新粘贴的图片，已有缓存不会搬移。"
+                )
+                on ChooseCache pressed do
+                (
+                    local folder = getSavePath caption:"选择图片缓存目录" initialDir:ClipboardCacheRoot
+                    if folder != undefined do
+                    (
+                        ClipboardCacheRoot = folder
+                        SettingCtrl.Save s_Cache
+                        LoadCache()
+                        CacheStatus.text = "新图片将保存到此目录；已有缓存仍在原目录。"
+                    )
+                )
+                on OpenCache pressed do
+                (
+                    try
+                    (
+                        (dotnetclass "System.IO.Directory").CreateDirectory ClipboardCacheRoot
+                        shellLaunch ClipboardCacheRoot ""
+                    )
+                    catch (messageBox (getCurrentException()) title:"图片缓存目录")
+                )
+                on ClearCache pressed do
+                (
+                    try
+                    (
+                        local result = ui_PlayerWindow.ClearClipboardCache ClipboardCacheRoot
+                        CacheStatus.text = "已清理 " + (result.Deleted as string) + " 份；使用中保留 " + (result.InUse as string) + " 份；未能删除 " + (result.Failed as string) + " 份。"
+                    )
+                    catch (messageBox (getCurrentException()) title:"清理图片缓存")
+                )
+
 				group "序列裁剪（原图像素）"
 				(
 					label CropSource "请先打开图片序列" align:#left
@@ -6180,7 +6500,7 @@
 				(
 					LoadingCrop = true
 					FreeCropPreview()
-					local loaded = dFile_GetImageCount() > 0 and m_PlayerMode == MODE_PLAYER_NORMAL
+					local loaded = dFile_GetImageCount() > 0 and m_PlayerMode == MODE_PLAYER_NORMAL and not ui_PlayerWindow.PoseMode
 					for control in #(CropLeft,CropTop,CropWidth,CropHeight,ApplyCrop,ResetCrop) do control.enabled = loaded
 					if not loaded do
 					(
@@ -6271,6 +6591,7 @@
 
 				on PlayerSetting_Rollout open do
 				(
+                    LoadCache()
 					CropPreview.BackColor = DNColor.FromArgb 35 35 35
 					CropPreview.SizeMode = PictureBoxSizeMode.CenterImage
 					local GroupCtrls = for ctrl in PlayerSetting_Rollout.controls where classof ctrl == GroupStartControl collect ctrl
@@ -6376,6 +6697,8 @@
 
 				on TimeSetting_Rollout open do
 				(
+                    local sequenceTiming = not ui_PlayerWindow.PoseMode
+                    for control in #(currFrameSp,SetStartKey2) do control.enabled = sequenceTiming
 					local GroupCtrls = for ctrl in TimeSetting_Rollout.controls where classof ctrl == GroupStartControl collect ctrl
 					GroupCtrls[1].Text = SETTING_TIME_STATUS_GROUP
 
@@ -6542,6 +6865,88 @@
             )
         )
 
+
+            rollout PoseKeys_Rollout "Pose 关键帧" width:260
+            (
+                label hint "每张 Pose 保持到下一个关键帧" align:#left
+                listbox poseList "Pose 帧（点击跳转）" items:#() height:10 width:235
+                spinner poseFrame "帧位置:" type:#integer range:[-99999,99999,0] fieldwidth:70
+                button applyFrame "修改帧位置" width:115 across:2
+                button atCurrent "移到当前时间" width:115
+                button removePose "删除选中 Pose" width:235
+                button alignStart "首张图定位到当前帧（整组平移）" width:235
+
+                fn RefreshKeys =
+                (
+                    local rows = #()
+                    if ui_PlayerWindow.Poses.Count > 0 do
+                        for i = 0 to (ui_PlayerWindow.Poses.Count-1) do append rows ("帧 " + ((ui_PlayerWindow.Poses.FrameAt i) as string))
+                    poseList.items = rows
+                    if rows.count > 0 do
+                    (
+                        poseList.selection = (ui_PlayerWindow.Poses.IndexAt (currentTime.frame as integer)) + 1
+                        poseFrame.value = ui_PlayerWindow.Poses.FrameAt (poseList.selection-1)
+                    )
+                )
+                fn MoveSelected newFrame =
+                (
+                    local index = poseList.selection
+                    if index < 1 or index > ui_PlayerWindow.Poses.Count do return()
+                    local oldFrame = ui_PlayerWindow.Poses.FrameAt (index-1)
+                    if not (ui_PlayerWindow.Poses.Move oldFrame newFrame) do
+                    (
+                        messageBox "目标帧已有 Pose，请选择其他帧。" title:"Pose 关键帧"
+                        return()
+                    )
+                    sliderTime = newFrame
+                    RefreshKeys()
+                    RP_Update()
+                )
+                on poseList selected index do
+                (
+                    if index > 0 and index <= ui_PlayerWindow.Poses.Count do
+                    (
+                        poseFrame.value = ui_PlayerWindow.Poses.FrameAt (index-1)
+                        sliderTime = poseFrame.value
+                        RP_Update()
+                    )
+                )
+                on applyFrame pressed do MoveSelected poseFrame.value
+                on atCurrent pressed do MoveSelected (currentTime.frame as integer)
+                on removePose pressed do
+                (
+                    local index = poseList.selection
+                    if index > 0 and index <= ui_PlayerWindow.Poses.Count do
+                    (
+                        ui_PlayerWindow.Poses.Remove (ui_PlayerWindow.Poses.FrameAt (index-1))
+                        RP_Update()
+                        RefreshKeys()
+                        if ui_PlayerWindow.Poses.Count == 0 do
+                        (
+                            ui_PlayerWindow.PoseMode = false
+                            ui_PlayerWindow.HasSequence = false
+                            uifn_ShowHomePanel()
+                        )
+                    )
+                )
+                on alignStart pressed do
+                (
+                    if ui_PlayerWindow.Poses.Count > 0 do
+                    (
+                        dTime_SetStartTime (currentTime.frame as integer)
+                        RP_Update()
+                        RefreshKeys()
+                    )
+                )
+                on PoseKeys_Rollout open do RefreshKeys()
+            )
+
+            fn RP_OpenPoseKeys =
+            (
+                try (destroyDialog PoseKeys_Rollout) catch()
+                createDialog PoseKeys_Rollout parent:ui_PlayerWindow.Handle
+            )
+
         (---- RC Menus ----
 			rcMenu rcMenu_Time
 			(
@@ -6561,6 +6966,8 @@
 				
 				on rcMenu_Time open do
 				(
+                    SetStartKey1.enabled = true
+                    SetStartKey2.enabled = not ui_PlayerWindow.PoseMode
 					SyncTimeRange.Text = SYNC_MAX_TIMERANGE
 					SetStartKey1.Text  = SYNC_SET_CURRENT_FRAME_AS_START_TIME
 					SetStartKey2.Text  = SYNC_SET_CURRENT_IMG_AS_ZERO_FRAME
@@ -6570,6 +6977,10 @@
 			rcMenu rcMenu_Display
 			(
 					
+                menuItem PastePose "粘贴 Pose 到当前帧（Ctrl+V）"
+                menuItem EditPoseKeys "Pose 关键帧..."
+                menuItem CacheSettings "图片缓存设置..."
+                separator spPoses
                 menuItem AddReferenceView "新增参考窗口"
                 menuItem LinkReferenceViews "联动移动/缩放"
                 menuItem UnifyReferenceSizes "统一为视图一大小"
@@ -6594,6 +7005,9 @@
 				
 				menuItem AlwaysOnTop "AlwaysOnTop" --"总在最前"
 
+                on PastePose picked do RP_PasteImage()
+                on EditPoseKeys picked do RP_OpenPoseKeys()
+                on CacheSettings picked do uifn_OpenSetting open:#Player hwnd:ui_PlayerWindow.Handle
                 on AddReferenceView picked do RPSession.CreateView beside:ui_PlayerWindow
                 on LinkReferenceViews picked do ui_PlayerWindow.LinkedMovement = not ui_PlayerWindow.LinkedMovement
                 on UnifyReferenceSizes picked do ui_PlayerWindow.UnifySizesToFirst()
@@ -6618,6 +7032,7 @@
                     UnifyReferenceSizes.enabled = ui_PlayerWindow.CanUnifySizes
                     local hasSequence = m_PlayerMode == MODE_PLAYER_NORMAL
                     for item in #(SetOriginalRes,FillViewport,CropSequence,GridLine) do item.enabled = hasSequence
+                    CropSequence.enabled = hasSequence and not ui_PlayerWindow.PoseMode
 					SetOriginalRes.Text = PLAYER_ORIGINALRES
 					FillViewport.Text   = PLAYER_FILL_VIEWPORT_ON
 					SetOpacity1.Text    = PLAYER_OPACITY_1
@@ -6660,6 +7075,13 @@
 
 			fn RefPlayerHotKey sender eventArgs =
 			(
+                if eventArgs.Control and not eventArgs.Shift and not eventArgs.Alt and eventArgs.KeyCode.ToString() == "V" do
+                (
+                    eventArgs.Handled = true
+                    eventArgs.SuppressKeyPress = true
+                    RP_PasteImage()
+                    return()
+                )
 				if not m_PlayerMode == MODE_PLAYER_NORMAL do return()
 
 				--print ( eventArgs.KeyCode.ToString())
@@ -6679,9 +7101,41 @@
 			)
 			
 			
+            fn RP_PasteImage =
+            (
+                try
+                (
+                    local folderPath = ui_PlayerWindow.CacheClipboard ClipboardCacheRoot
+                    if folderPath == undefined do
+                    (
+                        messageBox "剪贴板中没有图片，请先复制图片或图片文件。" title:"粘贴参考图"
+                        return false
+                    )
+                    local firstPose = not ui_PlayerWindow.PoseMode or ui_PlayerWindow.Poses.Count == 0
+                    if firstPose do
+                    (
+                        if not (RP_OpenFile folderPath) do return false
+                    )
+                    ui_PlayerWindow.Poses.Set (currentTime.frame as integer) (pathConfig.appendPath folderPath "clipboard.png")
+                    ui_PlayerWindow.PoseMode = true
+                    ui_PlayerWindow.NumberedSequence = false
+                    RP_Update()
+                    if firstPose do cDisplay_FitLoadedSequence 1
+                    if PoseKeys_Rollout.hwnd != undefined and PoseKeys_Rollout.hwnd != 0 do PoseKeys_Rollout.RefreshKeys()
+                    true
+                )
+                catch
+                (
+                    messageBox ("无法粘贴图片，请重新复制后再试。\n" + (getCurrentException())) title:"粘贴参考图"
+                    false
+                )
+            )
+
 			fn init_RegisterHotKey =
 			(
 				dotnet.addeventhandler ui_PlayerWindow #KeyDown RefPlayerHotKey
+                dotnet.addeventhandler ui_PlayerWindow #PasteRequested (fn _PasteReference sender eventArgs = RP_PasteImage())
+
 			)
 
 		)
@@ -6721,6 +7175,11 @@
                     SettingCtrl.Load s_Grid
                     cDisplay_UpdateGrid()
                     if GridSetting_Rollout.hwnd != undefined and GridSetting_Rollout.hwnd != 0 do GridSetting_Rollout.Load()
+                )
+                "CacheSetting":
+                (
+                    SettingCtrl.Load s_Cache
+                    if PlayerSetting_Rollout.hwnd != undefined and PlayerSetting_Rollout.hwnd != 0 do PlayerSetting_Rollout.LoadCache()
                 )
                 "DisplaySetting":
                 (

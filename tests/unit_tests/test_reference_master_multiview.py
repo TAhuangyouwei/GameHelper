@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +29,16 @@ class CornerProbe : RefPlayer.PlayerForm
     }
     public void MoveAt(System.Drawing.Point point) { base.OnMouseMove(new System.Windows.Forms.MouseEventArgs(System.Windows.Forms.MouseButtons.None, 0, point.X, point.Y, 0)); }
     public void DoubleAt(System.Drawing.Point point) { base.OnMouseDoubleClick(new System.Windows.Forms.MouseEventArgs(System.Windows.Forms.MouseButtons.Left, 2, point.X, point.Y, 0)); }
+    public bool Command(System.Windows.Forms.Keys keys)
+    {
+        var message = new System.Windows.Forms.Message();
+        return base.ProcessCmdKey(ref message, keys);
+    }
+    public void NativePaste()
+    {
+        var message = System.Windows.Forms.Message.Create(System.IntPtr.Zero, 0x0312, (System.IntPtr)0x5250, System.IntPtr.Zero);
+        base.WndProc(ref message);
+    }
 }
 class Test
 {
@@ -35,10 +46,10 @@ class Test
     static extern uint SetErrorMode(uint mode);
     static void Check(bool value, string message) { if (!value) throw new System.Exception(message); }
     [System.STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         SetErrorMode(2);
-        try { Run(); }
+        try { Run(); if (args.Length > 0) CheckExternalSparseFolder(args[0]); }
         catch (System.Exception error)
         {
             System.Console.Error.WriteLine(error.GetType().FullName + ": " + error.Message);
@@ -107,7 +118,217 @@ class Test
         CheckBatchLayout();
         CheckSharedSettings();
         CheckUnifySizes();
+        CheckClipboardPaste();
+        CheckPoseTrack();
+        CheckCacheCleanup();
+        CheckSparseFolder();
         System.Console.WriteLine("PASS: identical window type, no overlay UI, independent/linked movement, resize, per-window close, cleanup");
+    }
+
+    static void CheckSparseFolder()
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "refplayer-sparse-test-" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(root);
+        try
+        {
+            using (var poses = new RefPlayer.PoseTrack())
+            {
+                foreach (int frame in new int[] { 135, 1, 11, 6 })
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(root, "snapshot." + frame.ToString("D4") + ".png"), "fixture");
+                Check(poses.TryLoadSparseFolder(root) && poses.Count == 4, "Detect numeric gaps in an imported folder");
+                Check(poses.FrameAt(0) == 1 && poses.FrameAt(1) == 6 && poses.FrameAt(2) == 11 && poses.FrameAt(3) == 135, "Use exact original file frame numbers");
+                Check(poses.IndexAt(5) == 0 && poses.IndexAt(6) == 1 && poses.IndexAt(134) == 2, "Hold references throughout the missing frame intervals");
+                Check(poses.SetStartFrame(20) && poses.FrameAt(1) == 25 && poses.FrameAt(2) == 30 && poses.FrameAt(3) == 154, "Position the first image and shift all keys while preserving gaps");
+                Check(poses.SetStartFrame(-10) && poses.FrameAt(0) == -10 && poses.FrameAt(3) == 124, "Allow a negative first frame");
+                Check(!poses.SetStartFrame(System.Int32.MaxValue) && poses.FrameAt(0) == -10, "Reject an overflowing shift without losing keys");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(root, "other.0040.jpg"), "fixture");
+                Check(!poses.TryLoadSparseFolder(root) && poses.FrameAt(0) == -10, "Mixed name prefixes leave the existing track intact");
+            }
+            string dense = System.IO.Path.Combine(root, "dense");
+            System.IO.Directory.CreateDirectory(dense);
+            foreach (int frame in new int[] { 1, 2, 3 })
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dense, "shot" + frame + ".png"), "fixture");
+            using (var poses = new RefPlayer.PoseTrack())
+            {
+                Check(!poses.TryLoadSparseFolder(dense) && poses.Count == 0, "Keep dense image sequences on their existing playback path");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dense, "shot1.jpg"), "duplicate");
+                Check(!poses.TryLoadSparseFolder(dense), "Duplicate frame numbers are not silently merged");
+            }
+        }
+        finally { System.IO.Directory.Delete(root, true); }
+        System.Console.WriteLine("PASS: sparse numbered-folder import, exact file frames, hold intervals, first-frame alignment, dense/mixed/duplicate isolation");
+    }
+
+    static void CheckExternalSparseFolder(string folder)
+    {
+        using (var poses = new RefPlayer.PoseTrack())
+        {
+            Check(poses.TryLoadSparseFolder(folder), "The supplied image folder must import as sparse keys");
+            for (int i = 0; i < poses.Count; i++)
+            {
+                int frame = poses.FrameAt(i);
+                var image = poses.ImageAt(frame);
+                Check(image != null && image.Width > 0 && image.Height > 0, "Each actual pose image decodes");
+                Check(poses.IndexAt(frame) == i, "Actual frame switches happen exactly at each key");
+                if (i + 1 < poses.Count) Check(poses.IndexAt(poses.FrameAt(i + 1) - 1) == i, "Hold each actual pose until the next key");
+            }
+            int lastGap = poses.FrameAt(poses.Count - 1) - poses.FrameAt(0);
+            Check(poses.SetStartFrame(20) && poses.FrameAt(poses.Count - 1) == 20 + lastGap, "Actual imported poses keep their rhythm after first-frame alignment");
+            System.Console.WriteLine("PASS: supplied folder: " + poses.Count + " image keys decode and hold correctly; first-frame shift preserves " + lastGap + " frames");
+        }
+    }
+
+    static void CheckCacheCleanup()
+    {
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "refplayer-cleanup-test-" + System.Guid.NewGuid().ToString("N"));
+        using (var first = new RefPlayer.PlayerForm())
+        using (var second = new RefPlayer.PlayerForm())
+        using (var image = new System.Drawing.Bitmap(8, 8))
+        {
+            first.JoinGroup(); second.JoinGroup();
+            Check(first.ClearClipboardCache(root).Deleted == 0 && !System.IO.Directory.Exists(root), "Cleaning an absent cache creates nothing");
+            try
+            {
+                var data = new System.Windows.Forms.DataObject(System.Windows.Forms.DataFormats.Bitmap, image);
+                string a = RefPlayer.PlayerForm.CacheClipboardImage(data, root);
+                string b = RefPlayer.PlayerForm.CacheClipboardImage(data, root);
+                string reference = RefPlayer.PlayerForm.CacheClipboardImage(data, root);
+                string unused = RefPlayer.PlayerForm.CacheClipboardImage(data, root);
+                first.Poses.Set(0, System.IO.Path.Combine(a, "clipboard.png").ToUpperInvariant());
+                second.Poses.Set(30, System.IO.Path.Combine(b, "clipboard.png"));
+                first.ReferenceFolder = reference + System.IO.Path.DirectorySeparatorChar;
+                string unrelated = System.IO.Path.Combine(root, "my-images");
+                System.IO.Directory.CreateDirectory(unrelated);
+                image.Save(System.IO.Path.Combine(unrelated, "clipboard.png"));
+                string extra = RefPlayer.PlayerForm.CacheClipboardImage(data, root);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(extra, "user-notes.txt"), "keep");
+                string rootFile = System.IO.Path.Combine(root, "personal.png");
+                image.Save(rootFile);
+                var result = first.ClearClipboardCache(root);
+                Check(result.Deleted == 1 && result.InUse == 3 && result.Failed == 0 && !System.IO.Directory.Exists(unused), "Delete unused caches and protect every active reference/pose window");
+                Check(System.IO.File.Exists(rootFile) && System.IO.Directory.Exists(extra) && System.IO.Directory.Exists(unrelated), "A custom directory keeps unrelated files and folders");
+                second.Dispose();
+                result = first.ClearClipboardCache(root);
+                Check(result.Deleted == 1 && result.InUse == 2 && !System.IO.Directory.Exists(b), "A closed window's cache becomes removable");
+                first.Poses.Clear(); first.ReferenceFolder = null;
+                result = first.ClearClipboardCache(root);
+                Check(result.Deleted == 2 && result.InUse == 0, "Released pose and sequence references can be cleaned");
+                string locked = RefPlayer.PlayerForm.CacheClipboardImage(data, root);
+                string lockedFile = System.IO.Path.Combine(locked, "clipboard.png");
+                System.IO.File.SetAttributes(lockedFile, System.IO.FileAttributes.ReadOnly);
+                try
+                {
+                    result = first.ClearClipboardCache(root);
+                    Check(result.Failed == 1 && System.IO.File.Exists(lockedFile), "Report files that cannot be deleted");
+                }
+                finally { System.IO.File.SetAttributes(lockedFile, System.IO.FileAttributes.Normal); }
+            }
+            finally { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+        }
+        System.Console.WriteLine("PASS: unused-cache cleanup, active references across windows, custom-folder file protection, closed views, deletion failures");
+    }
+
+    static void CheckPoseTrack()
+    {
+        using (var first = new RefPlayer.PlayerForm())
+        using (var second = new RefPlayer.PlayerForm())
+        {
+            first.Poses.Set(0, "idle");
+            second.Poses.Set(10, "attack");
+            Check(first.Poses.FrameAt(0) == 0 && second.Poses.FrameAt(0) == 10, "Each reference view has an independent pose track");
+            first.Dispose();
+            Check(first.Poses.Count == 0 && second.Poses.Count == 1, "Closing one pose view clears only its own track");
+        }
+        using (var poses = new RefPlayer.PoseTrack())
+        {
+            Check(poses.IndexAt(0) == -1 && poses.ImageAt(0) == null, "An empty pose track is safe");
+            poses.Set(30, "idle-end"); poses.Set(0, "idle"); poses.Set(16, "recover"); poses.Set(5, "charge"); poses.Set(10, "attack");
+            int[] frames = { 0, 5, 10, 16, 30 };
+            for (int i = 0; i < frames.Length; i++) Check(poses.FrameAt(i) == frames[i], "Sort sparse pose keys by frame");
+            for (int frame = -2; frame <= 33; frame++)
+            {
+                int expected = frame >= 30 ? 4 : frame >= 16 ? 3 : frame >= 10 ? 2 : frame >= 5 ? 1 : 0;
+                Check(poses.IndexAt(frame) == expected, "Hold each pose until the next key, including before/after the sequence");
+            }
+            poses.Set(10, "new-attack");
+            Check(poses.Count == 5, "Pasting at an existing key replaces it");
+            Check(poses.Move(10, 12) && poses.IndexAt(10) == 1 && poses.IndexAt(12) == 2, "Moving a pose immediately changes playback rhythm");
+            Check(!poses.Move(12, 16) && poses.Count == 5 && poses.FrameAt(2) == 12, "Reject collisions without losing either pose");
+            Check(poses.Move(12, 12), "Moving a key to its own frame is safe");
+            Check(poses.Move(5, -5) && poses.FrameAt(0) == -5, "Keys can cross other keys and use negative frames");
+            poses.Remove(16);
+            Check(poses.Count == 4 && poses.IndexAt(20) == 2, "Deleting a key extends the preceding pose hold");
+            poses.Clear();
+            Check(poses.Count == 0 && poses.ImageAt(30) == null, "Clearing a track releases its state");
+        }
+        System.Console.WriteLine("PASS: 0/5/10/16/30 sparse poses, hold playback, replacement, editable timing, collision protection, deletion");
+    }
+
+    static void CheckClipboardPaste()
+    {
+        using (var first = new CornerProbe())
+        using (var second = new CornerProbe())
+        {
+            int a = 0, b = 0;
+            first.PasteRequested += delegate { a++; };
+            second.PasteRequested += delegate { b++; };
+            var paste = System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.V;
+            Check(second.Command(paste) && a == 0 && b == 1, "Ctrl+V targets only the selected empty reference window");
+            first.HasSequence = true;
+            Check(first.Command(paste) && a == 1, "Ctrl+V also works after a sequence is loaded");
+            first.Command(System.Windows.Forms.Keys.V);
+            first.Command(paste | System.Windows.Forms.Keys.Shift);
+            first.clickThrough = true;
+            first.Command(paste);
+            first.clickThrough = false;
+            first.SuspendLinkedResize = true;
+            first.Command(paste);
+            Check(a == 1, "Plain keys, other modifiers, locked and minimized windows do not paste");
+            first.SuspendLinkedResize = false;
+            first.NativePaste();
+            Check(a == 2 && b == 1, "Native Ctrl+V delivery bypasses Max key accelerators without duplicating another view");
+        }
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "refplayer-paste-test-" + System.Guid.NewGuid().ToString("N"));
+        string cache = System.IO.Path.Combine(root, "cache");
+        try
+        {
+            var text = new System.Windows.Forms.DataObject(System.Windows.Forms.DataFormats.Text, "text only");
+            Check(RefPlayer.PlayerForm.CacheClipboardImage(text, cache) == null && !System.IO.Directory.Exists(cache), "Non-image data changes no files");
+            using (var image = new System.Drawing.Bitmap(64, 32))
+            {
+                image.SetPixel(10, 5, System.Drawing.Color.FromArgb(128, 200, 100, 50));
+                var data = new System.Windows.Forms.DataObject(System.Windows.Forms.DataFormats.Bitmap, image);
+                string one = RefPlayer.PlayerForm.CacheClipboardImage(data, cache);
+                string two = RefPlayer.PlayerForm.CacheClipboardImage(data, cache);
+                Check(one != two && System.IO.Directory.GetFiles(one).Length == 1 && System.IO.Directory.GetFiles(two).Length == 1,
+                    "Each paste is isolated as a single frame, with no accidental sequence merging");
+                using (var loaded = new System.Drawing.Bitmap(System.IO.Path.Combine(one, "clipboard.png")))
+                {
+                    Check(loaded.Width == 64 && loaded.Height == 32, "Pasting preserves image dimensions");
+                    Check(loaded.GetPixel(10, 5).ToArgb() == image.GetPixel(10, 5).ToArgb(), "PNG cache preserves pixel color and transparency");
+                }
+                using (var poses = new RefPlayer.PoseTrack())
+                {
+                    poses.Set(0, System.IO.Path.Combine(one, "clipboard.png"));
+                    var shown = poses.ImageAt(0);
+                    Check(shown.Size == image.Size && object.ReferenceEquals(shown, poses.ImageAt(4)), "Pose playback reuses the held image");
+                    poses.Set(5, System.IO.Path.Combine(two, "clipboard.png"));
+                    Check(poses.ImageAt(5).Size == image.Size, "Pose image switching loads the next key");
+                    poses.Clear();
+                    Check(poses.ImageAt(0) == null, "Image cache clears with the track");
+                }
+                string original = System.IO.Path.Combine(root, "original.png");
+                image.Save(original, System.Drawing.Imaging.ImageFormat.Png);
+                var files = new System.Windows.Forms.DataObject(System.Windows.Forms.DataFormats.FileDrop, new string[] { original });
+                string folder = RefPlayer.PlayerForm.CacheClipboardImage(files, cache);
+                using (var copied = new System.Drawing.Bitmap(System.IO.Path.Combine(folder, "clipboard.png")))
+                    Check(copied.Size == image.Size, "Explorer-copied image files paste as a single image");
+                System.IO.File.Delete(original);
+                Check(System.IO.File.Exists(System.IO.Path.Combine(folder, "clipboard.png")), "The reference keeps its own copy and releases the source file");
+            }
+        }
+        finally { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+        System.Console.WriteLine("PASS: per-view Ctrl+V, empty/loaded windows, image/file clipboard formats, PNG pixels, isolated caches, no system clipboard writes");
     }
 
     static void CheckSharedSettings()
@@ -129,14 +350,14 @@ class Test
             };
             closed.SharedSettingsChanged += delegate { stale++; };
             closed.Dispose();
-            foreach (string category in new[] { "GridSetting", "RAMSetting", "RecordSetting", "DisplaySetting" })
+            foreach (string category in new[] { "GridSetting", "RAMSetting", "RecordSetting", "DisplaySetting", "CacheSetting" })
             {
                 first.BroadcastSettings(category);
                 Check(received == category, "All shared categories reach other windows while movement is unlinked");
             }
-            Check(updates == 4 && self == 0 && stale == 0, "Settings do not echo to the source or reach closed windows");
+            Check(updates == 5 && self == 0 && stale == 0, "Settings do not echo to the source or reach closed windows");
             second.BroadcastSettings("GridSetting");
-            Check(self == 1 && updates == 4, "Settings can be changed from either window");
+            Check(self == 1 && updates == 5, "Settings can be changed from either window");
         }
         System.Console.WriteLine("PASS: immediate shared-setting notifications, independent movement, per-category updates, closed-window cleanup");
     }
@@ -434,6 +655,23 @@ def main():
     assert re.search(r'catch\s*\(\s*ApplyingSharedSettings = false\s*throw\(\)\s*\)', script), \
         'MAXScript catch must reset the sharing guard and rethrow without arguments'
     assert '#SharedSettingsChanged' in script
+    assert '#PasteRequested' in script and 'fn RP_PasteImage =' in script
+    paste_handler = script[script.index('fn RP_PasteImage ='):script.index('fn init_RegisterHotKey =')]
+    for operation in ('CacheClipboard ClipboardCacheRoot', 'RP_OpenFile folderPath', 'Poses.Set (currentTime.frame as integer)', 'RP_Update()', 'cDisplay_FitLoadedSequence 1'):
+        assert operation in paste_handler
+    assert 'dTime_SetStartTime 0' not in paste_handler
+    assert 'ui_PlayerWindow.Poses.ImageAt (currentTime.frame as integer)' in script
+    assert 'menuItem PastePose "粘贴 Pose 到当前帧（Ctrl+V）"' in script
+    assert 'menuItem EditPoseKeys "Pose 关键帧..."' in script
+    assert 'RegisterHotKey(Handle, PasteHotKeyId, 0x4002' in script
+    assert 'protected override void OnDeactivate' in script and 'ReleasePasteHotKey();' in script
+    assert 'rollout PoseKeys_Rollout "Pose 关键帧"' in script
+    assert 'group "图片缓存目录"' in script and 'SettingCtrl.Load s_Cache' in script
+    assert 'SettingCtrl.Save s_Cache' in script and '"CacheSetting":' in script
+    assert 'ui_PlayerWindow.ReferenceFolder = thepath' in script
+    assert 'ui_PlayerWindow.Poses.TryLoadSparseFolder thepath' in script
+    assert 'ui_PlayerWindow.Poses.SetStartFrame (val as integer)' in script
+    assert 'button alignStart "首张图定位到当前帧（整组平移）"' in script
     for category in ('RAMSetting', 'RecordSetting', 'GridSetting', 'DisplaySetting'):
         assert f'"{category}":' in script
     assert script.index('#SharedSettingsChanged') < script.rindex('RP_Start()')
@@ -457,7 +695,7 @@ def main():
         exe = folder / 'player.exe'
         subprocess.run([str(CSC), '/nologo', f'/out:{exe}', '/reference:System.Windows.Forms.dll',
                         '/reference:System.Drawing.dll', str(player_source)], check=True)
-        run_exe([str(exe)])
+        run_exe([str(exe), *sys.argv[1:]])
         legacy = folder / 'legacy.cs'
         legacy.write_text('namespace RefPlayer { public class PlayerForm {} }', encoding='utf-8')
         legacy_dll = folder / 'legacy.dll'

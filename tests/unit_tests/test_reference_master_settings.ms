@@ -28,7 +28,7 @@
         local secondValue = 0
         local a = RefSettingsValueProbe Value:&firstValue
         local b = RefSettingsValueProbe Value:&secondValue
-        for category in #(\"RAMSetting\",\"RecordSetting\",\"GridSetting\",\"DisplaySetting\") do
+        for category in #(\"RAMSetting\",\"RecordSetting\",\"GridSetting\",\"DisplaySetting\",\"CacheSetting\") do
         (
             a.Category = category
             b.Category = category
@@ -42,7 +42,7 @@
             firstCtrl.Load a
             if firstValue != 83 do throw \"A sibling could not change the shared setting\"
         )
-        if ui_PlayerWindow.Changes.count != 8 do throw \"Shared setting notifications missing\"
+        if ui_PlayerWindow.Changes.count != 10 do throw \"Shared setting notifications missing\"
         local siblingIni = pathConfig.appendPath TEST_DIR \"RefPlayer2020_View2.ini\"
         if doesFileExist siblingIni do throw \"Shared settings leaked into the per-view INI\"
 
@@ -59,7 +59,7 @@
             secondCtrl.Load b
             if firstValue != 11 or secondValue != 22 do throw \"Per-view position/history settings were merged\"
         )
-        if ui_PlayerWindow.Changes.count != 8 do throw \"Per-view settings notified siblings\"
+        if ui_PlayerWindow.Changes.count != 10 do throw \"Per-view settings notified siblings\"
 
         a.Category = \"GridSetting\"
         b.Category = \"GridSetting\"
@@ -68,7 +68,7 @@
         firstCtrl.Save a
         ApplyingSharedSettings = false
         secondCtrl.Load b
-        if secondValue != 83 or ui_PlayerWindow.Changes.count != 8 do throw \"Applying settings echoed a stale value\"
+        if secondValue != 83 or ui_PlayerWindow.Changes.count != 10 do throw \"Applying settings echoed a stale value\"
         RPViewIndex = 3
         local newCtrl = sSettingCtrl()
         newCtrl.Load b
