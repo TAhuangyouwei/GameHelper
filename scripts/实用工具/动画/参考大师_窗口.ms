@@ -18,6 +18,8 @@
             在不同帧重复粘贴可建立非连续Pose序列，同一帧再次粘贴会替换；每个Pose保持至下一关键帧
             中键“Pose 关键帧...”可修改帧位置、移到当前时间或删除，Pose序列在当前参考窗口内保留
             拖拽文件夹/图像文件到播放窗口
+            也可拖入MP4、MOV、AVI、MKV、WebM等视频；按当前Max帧率转换后跟随时间轴，无音频
+            转换支持取消，生成帧存入设置中的缓存目录，可清理闲置视频缓存
             会打开该文件夹中所有*.jpg|*.png格式的图像
             同名前缀且编号跳帧时自动按关键帧播放：0001、0006、0011对应Max的1、6、11帧，中间保持上一张
             连续编号文件夹仍使用原来的连续播放；关键帧位置可在中键“Pose 关键帧...”中调整，首张图定位时整组平移并保留间隔
@@ -441,7 +443,7 @@
         local PlayerSetting_Rollout
         local TimeSetting_Rollout
         local PoseKeys_Rollout
-        local RP_PasteImage, RP_OpenPoseKeys
+        local RP_PasteImage, RP_OpenPoseKeys, RP_ImportVideo
 		local GridSetting_Rollout
         
 		local s_Grid,s_Player,s_PlayList,s_RAM,s_Recorder,s_Display,s_Cache
@@ -1242,6 +1244,8 @@
                 ui_PlayerWindow.Poses.Clear()
                 ui_PlayerWindow.NumberedSequence = ui_PlayerWindow.Poses.TryLoadSparseFolder thepath
                 ui_PlayerWindow.PoseMode = ui_PlayerWindow.NumberedSequence
+                local VideoTool = dotnetclass (RP_TypeName "VideoImportJob")
+                dTime_SetPlayerFps (VideoTool.CachedFps thepath)
 				if m_PlayerMode == MODE_PLAYER_HOME do uifn_QuitHomePanel()
                 ui_PlayerWindow.HasSequence = true
 				LastDisplayIndex = 0
@@ -2302,6 +2306,83 @@
             namespace RefPlayer
             {
 
+
+                public sealed class VideoImportJob : IDisposable
+                {
+                    private readonly System.Diagnostics.Process process = new System.Diagnostics.Process();
+                    private readonly System.Text.StringBuilder errors = new System.Text.StringBuilder();
+                    private readonly int fps;
+                    private bool complete;
+                    public readonly string Folder;
+                    public volatile int Frames;
+                    public static bool IsVideoFile(string file)
+                    {
+                        string ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
+                        return ext == \".mp4\" || ext == \".mov\" || ext == \".avi\" || ext == \".mkv\" || ext == \".webm\" || ext == \".m4v\" || ext == \".wmv\" || ext == \".mpg\" || ext == \".mpeg\";
+                    }
+                    public static int CachedFps(string folder)
+                    {
+                        string info = System.IO.Path.Combine(folder, \".refplayer-video\");
+                        int value;
+                        return System.IO.File.Exists(info) && Int32.TryParse(System.IO.File.ReadAllText(info), out value) && value > 0 ? value : 30;
+                    }
+                    private static string Quote(string value) { return \"\\\"\" + value + \"\\\"\"; }
+                    public VideoImportJob(string executable, string input, string root, int frameRate)
+                    {
+                        if (!System.IO.File.Exists(executable)) throw new System.IO.FileNotFoundException(\"Missing FFmpeg: \" + executable);
+                        if (!IsVideoFile(input) || !System.IO.File.Exists(input)) throw new ArgumentException(\"Invalid video file\");
+                        if (frameRate < 1) throw new ArgumentOutOfRangeException(\"frameRate\");
+                        fps = frameRate;
+                        Folder = System.IO.Path.Combine(System.IO.Path.GetFullPath(root), Guid.NewGuid().ToString(\"N\"));
+                        System.IO.Directory.CreateDirectory(Folder);
+                        process.StartInfo = new System.Diagnostics.ProcessStartInfo(executable,
+                            \"-nostdin -hide_banner -loglevel error -i \" + Quote(System.IO.Path.GetFullPath(input)) +
+                            \" -map 0:v:0 -an -sn -dn -vf \" + Quote(\"fps=fps=\" + fps + \":start_time=0\") +
+                            \" -q:v 2 -start_number 0 -progress pipe:1 \" + Quote(System.IO.Path.Combine(Folder.Replace(\"%\", \"%%\"), \"video_%08d.jpg\")));
+                        process.StartInfo.UseShellExecute = false;
+                        process.StartInfo.CreateNoWindow = true;
+                        process.StartInfo.RedirectStandardError = true;
+                        process.StartInfo.RedirectStandardOutput = true;
+                        process.OutputDataReceived += delegate(object sender, System.Diagnostics.DataReceivedEventArgs e)
+                        {
+                            int count;
+                            if (e.Data != null && e.Data.StartsWith(\"frame=\") && Int32.TryParse(e.Data.Substring(6).Trim(), out count)) Frames = count;
+                        };
+                        process.ErrorDataReceived += delegate(object sender, System.Diagnostics.DataReceivedEventArgs e)
+                        {
+                            lock (errors) if (e.Data != null && errors.Length < 8192) errors.AppendLine(e.Data);
+                        };
+                        try { process.Start(); process.BeginOutputReadLine(); process.BeginErrorReadLine(); }
+                        catch { process.Dispose(); System.IO.Directory.Delete(Folder, true); throw; }
+                    }
+                    public bool Running { get { return !process.HasExited; } }
+                    public string Finish()
+                    {
+                        process.WaitForExit();
+                        if (process.ExitCode != 0 || System.IO.Directory.GetFiles(Folder, \"video_*.jpg\").Length == 0)
+                            throw new InvalidOperationException(\"Video import failed: \" + errors.ToString());
+                        System.IO.File.WriteAllText(System.IO.Path.Combine(Folder, \".refplayer-video\"), fps.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        complete = true;
+                        return Folder;
+                    }
+                    public void Cancel()
+                    {
+                        try { if (!process.HasExited) process.Kill(); }
+                        catch (InvalidOperationException) { }
+                        catch (System.ComponentModel.Win32Exception) { if (!process.HasExited) throw; }
+                        process.WaitForExit();
+                    }
+                    public void Dispose()
+                    {
+                        try { if (!complete) Cancel(); }
+                        finally
+                        {
+                            process.Dispose();
+                            if (!complete && System.IO.Directory.Exists(Folder)) System.IO.Directory.Delete(Folder, true);
+                        }
+                    }
+                }
+
                 public sealed class PoseTrack : IDisposable
                 {
                     private SortedList<int, string> keys = new SortedList<int, string>();
@@ -2524,6 +2605,35 @@
                     }
 
 
+
+                    public string ImportVideo(string executable, string file, string root, int fps)
+                    {
+                        using (var job = new VideoImportJob(executable, file, root, fps))
+                        using (var dialog = new Form())
+                        using (var timer = new Timer())
+                        {
+                            dialog.Text = \"导入参考视频\";
+                            dialog.StartPosition = FormStartPosition.CenterParent;
+                            dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                            dialog.ClientSize = new Size(360, 100);
+                            dialog.MaximizeBox = dialog.MinimizeBox = false;
+                            var label = new Label { Left = 15, Top = 15, Width = 330, Height = 35, Text = \"正在读取视频...\" };
+                            var cancel = new Button { Left = 260, Top = 60, Width = 80, Text = \"取消\", DialogResult = DialogResult.Cancel };
+                            dialog.Controls.Add(label); dialog.Controls.Add(cancel);
+                            dialog.CancelButton = cancel;
+                            timer.Interval = 100;
+                            timer.Tick += delegate
+                            {
+                                label.Text = \"正在转换视频，已生成 \" + job.Frames + \" 帧\";
+                                if (!job.Running) { timer.Stop(); dialog.DialogResult = DialogResult.OK; dialog.Close(); }
+                            };
+                            timer.Start();
+                            DialogResult result = dialog.ShowDialog(this);
+                            timer.Stop();
+                            return result == DialogResult.OK ? job.Finish() : null;
+                        }
+                    }
+
                     public string ReferenceFolder;
                     public bool PoseMode, NumberedSequence;
                     public readonly PoseTrack Poses = new PoseTrack();
@@ -2625,7 +2735,17 @@
                             if (!Guid.TryParseExact(System.IO.Path.GetFileName(folder), \"N\", out id)) continue;
                             if ((System.IO.File.GetAttributes(folder) & System.IO.FileAttributes.ReparsePoint) != 0) continue;
                             string file = System.IO.Path.Combine(folder, \"clipboard.png\");
-                            if (!System.IO.File.Exists(file) || System.IO.Directory.GetFiles(folder).Length != 1 || System.IO.Directory.GetDirectories(folder).Length != 0) continue;
+                            string[] cached = System.IO.Directory.GetFiles(folder);
+                            if (System.IO.Directory.GetDirectories(folder).Length != 0) continue;
+                            bool video = System.IO.File.Exists(System.IO.Path.Combine(folder, \".refplayer-video\"));
+                            if (video)
+                            {
+                                bool known = true;
+                                foreach (string entry in cached)
+                                    if (System.IO.Path.GetFileName(entry) != \".refplayer-video\" && !System.Text.RegularExpressions.Regex.IsMatch(System.IO.Path.GetFileName(entry), @\"^video_[0-9]{8}\\d*\\.jpg$\")) known = false;
+                                if (!known) continue;
+                            }
+                            else if (!System.IO.File.Exists(file) || cached.Length != 1) continue;
                             bool inUse = false;
                             foreach (PlayerForm view in views)
                             {
@@ -2637,7 +2757,7 @@
                             if (inUse) { result.InUse++; continue; }
                             try
                             {
-                                System.IO.File.Delete(file);
+                                foreach (string entry in cached) System.IO.File.Delete(entry);
                                 System.IO.Directory.Delete(folder);
                                 result.Deleted++;
                             }
@@ -5598,7 +5718,8 @@
 
 					(/* if file is image or folder of image, allow file drop */
 						local AllowFileDrop = false
-						if fileType == ".jpg" or fileType == ".png" then AllowFileDrop = true
+                        local VideoTool = dotnetclass (RP_TypeName "VideoImportJob")
+						if fileType == ".jpg" or fileType == ".png" or (VideoTool.IsVideoFile file) then AllowFileDrop = true
 						else if fileType == "" then
 						(
 							local imgFiles = GetFiles (folderPath + "\\*.jpg")
@@ -5626,7 +5747,9 @@
                     local file = (EventArgs.Data.GetData(DataFormats.FileDrop))[1]
                     local folderPath = GetFileFolderPath file
                     
-                    if RP_OpenFile folderPath do
+                    local VideoTool = dotnetclass (RP_TypeName "VideoImportJob")
+                    if VideoTool.IsVideoFile file then RP_ImportVideo file
+                    else if RP_OpenFile folderPath do
 					(
 						dTime_SetStartTime 0
                         RP_Update()
@@ -7101,6 +7224,27 @@
 			)
 			
 			
+            fn RP_ImportVideo file =
+            (
+                try
+                (
+                    local executable = pathConfig.appendPath (getFilenamePath RPSession.CorePath) "../../../.local/refplayer/ffmpeg.exe"
+                    local folder = ui_PlayerWindow.ImportVideo executable file ClipboardCacheRoot frameRate
+                    if folder == undefined do return false
+                    if not (RP_OpenFile folder) do return false
+                    dTime_SetStartTime 0
+                    RP_Update()
+                    cDisplay_FitLoadedSequence 1
+                    fFile_SavePlayList()
+                    true
+                )
+                catch
+                (
+                    messageBox ("视频导入失败：\n" + (getCurrentException())) title:"参考大师"
+                    false
+                )
+            )
+
             fn RP_PasteImage =
             (
                 try
