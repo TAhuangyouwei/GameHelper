@@ -207,7 +207,10 @@ struct CGH_PoseClipboardStruct
         local failure = undefined
         -- Restore all edits together if a controller rejects the operation.
         if theHold.Holding() do throw "请结束当前交互操作后再粘贴。"
-        theHold.Begin()
+        -- Rollout handlers start with MXS undo recording off. A Hold alone does not enable it.
+        -- Group the explicit undo context so a failed paste can cancel only its own edits.
+        theHold.SuperBegin()
+        undo "GameHelper Paste Pose" on
         (
             try
             (
@@ -249,7 +252,7 @@ struct CGH_PoseClipboardStruct
                 )
             ) catch (failure = getCurrentException())
         )
-        if failure != undefined then theHold.Cancel() else theHold.Accept "GameHelper Paste Pose"
+        if failure != undefined then theHold.SuperCancel() else theHold.SuperAccept "GameHelper Paste Pose"
         if io.Exists cpyPath do io.Delete cpyPath
         if failure != undefined do throw failure
         redrawViews()

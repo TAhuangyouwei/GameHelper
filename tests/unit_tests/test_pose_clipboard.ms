@@ -20,6 +20,7 @@
         for row = 1 to 4 where distance a[row] b[row] > 0.001 do equal = false
         equal
     )
+    fn keyTimes ctrl = (for index = 1 to numKeys ctrl collect getKeyTime ctrl index)
     try
     (
         -- Exercise the real default path too; cachePath below bypasses this in scene tests.
@@ -53,11 +54,24 @@
         parent.pos = [40,20,10]
         child.rotation = quat 0 0 0 1
         local before = child.transform
-        at time 10 tool.pastePose()
+        local parentBefore = parent.transform
+        local boneKeyTimes = keyTimes child.rotation.controller
+        local parentKeyTimes = keyTimes parent.position.controller
+        -- Rollout buttons run without an undo-on context; Listener-only tests hide this bug.
+        with undo off (at time 10 tool.pastePose())
         at time 10 check (closeTM wanted child.transform) "parent-first Bone round trip"
         check (child.controller == originalController) "controller replaced"
         max undo
-        check (closeTM before child.transform) "single undo did not restore pose"
+        at time 10
+        (
+            check (closeTM before child.transform) "single undo did not restore pose"
+            check (closeTM parentBefore parent.transform) "single undo did not restore parent"
+        )
+        check ((keyTimes child.rotation.controller) as string == boneKeyTimes as string) "undo retained new Bone keys"
+        check ((keyTimes parent.position.controller) as string == parentKeyTimes as string) "undo retained new parent keys"
+        max redo
+        at time 10 check (closeTM wanted child.transform) "Bone redo did not restore pasted pose"
+        max undo
         -- Local Bone posture must follow the target parent instead of restoring world space.
         tool.copyPose #(child)
         local boneLocalPose = child.transform * inverse parent.transform
@@ -68,6 +82,28 @@
         tool.pastePose()
         check (closeTM movedParent parent.transform) "partial Bone paste moved its parent"
         check (closeTM boneLocalPose (child.transform * inverse parent.transform)) "partial Bone paste did not follow target parent"
+        -- Force a late controller failure after Bone edits; cancel must not undo earlier work.
+        local blocked = point name:(prefix + "_blocked")
+        append created blocked
+        blocked.parent = child
+        blocked.position.controller = position_script()
+        blocked.position.controller.script = "[1,0,0]"
+        tool.copyPose #(child,blocked)
+        local blockedDoc = tool.loadPose()
+        local blockedEntry = (blockedDoc.SelectNodes "/PoseClipboard/Node").Item 1
+        blockedEntry.SetAttribute "r4_1" "999"
+        blockedDoc.Save tool.cachePath
+        rotate child (angleAxis 20 [0,0,1])
+        undo "Pose test previous edit" on (parent.pos += [3,0,0])
+        local previousEdit = parent.transform
+        local failedPasteBefore = child.transform
+        local failedKeyTimes = keyTimes child.rotation.controller
+        local pasteError = ""
+        with undo off (try (tool.pastePose()) catch (pasteError = getCurrentException() as string))
+        check (pasteError != "") "controller failure fixture was not rejected"
+        check (closeTM failedPasteBefore child.transform) "failed paste did not roll back earlier Bone edits"
+        check (closeTM previousEdit parent.transform) "failed paste undid unrelated earlier work"
+        check (((keyTimes child.rotation.controller) as string) == (failedKeyTimes as string)) "failed paste retained new keys"
         -- Replace an existing clipboard and ensure a rejected copy preserves it.
         tool.copyPose #(child)
         local replacedDoc = tool.loadPose()
@@ -106,12 +142,32 @@
         tool.copyPose #(hand,child)
         check (biped.numCopyCollections ctrl == copyCount) "copy leaked collection"
         biped.setTransform hand #rotation (rotation * quat 25 [0,0,1]) true
-        at time 12 tool.pastePose()
+        local mixedHandBefore = at time 12 hand.transform
+        local mixedBoneBefore = at time 12 child.transform
+        local handKeyTimes = keyTimes hand.controller
+        boneKeyTimes = keyTimes child.rotation.controller
+        with undo off (at time 12 tool.pastePose())
         at time 12 check (closeTM (matrix3 rotation) (matrix3 (biped.getTransform hand #rotation))) "Biped native posture round trip"
         check (hand.controller == controller) "Biped controller replaced"
         check (biped.numCopyCollections ctrl == copyCount) "paste lost or leaked collections"
         check ((biped.getCopyCollection ctrl copyCount).name == keep.name) "existing Biped collection changed"
-        at time 13 tool.pastePose()
+        local mixedHandAfter = at time 12 hand.transform
+        local mixedBoneAfter = at time 12 child.transform
+        max undo
+        at time 12
+        (
+            check (closeTM mixedHandBefore hand.transform) "single mixed undo did not restore Biped"
+            check (closeTM mixedBoneBefore child.transform) "single mixed undo did not restore Bone"
+        )
+        check ((keyTimes hand.controller) as string == handKeyTimes as string) "mixed undo retained new Biped keys"
+        check ((keyTimes child.rotation.controller) as string == boneKeyTimes as string) "mixed undo retained new Bone keys"
+        max redo
+        at time 12
+        (
+            check (closeTM mixedHandAfter hand.transform) "mixed redo did not restore Biped"
+            check (closeTM mixedBoneAfter child.transform) "mixed redo did not restore Bone"
+        )
+        with undo off (at time 13 tool.pastePose())
         check (biped.numCopyCollections ctrl == copyCount) "repeated paste leaked collections"
         -- Copy a finger, raise the arm, then restore only the finger's local posture.
         local finger = biped.getNode bip #lfingers link:1
@@ -127,16 +183,25 @@
             local raisedArm = upperArm.transform
             local raisedHand = hand.transform
             local fingerParent = finger.parent.transform
-            tool.pastePose()
+            local fingerBefore = finger.transform
+            local fingerKeyTimes = keyTimes finger.controller
+            with undo off (tool.pastePose())
             check (closeTM raisedArm upperArm.transform) "finger posture paste moved raised arm"
             check (closeTM raisedHand hand.transform) "finger posture paste moved hand"
             check (closeTM fingerParent finger.parent.transform) "finger posture paste moved its parent"
             check (closeTM fingerLocalPose (finger.transform * inverse finger.parent.transform)) "finger local posture changed with raised arm"
+            local fingerAfter = finger.transform
+            max undo
+            check (closeTM fingerBefore finger.transform) "Biped-only undo did not restore finger"
+            check ((keyTimes finger.controller) as string == fingerKeyTimes as string) "Biped-only undo changed original key times"
+            check (closeTM raisedArm upperArm.transform) "finger undo moved raised arm"
+            max redo
+            check (closeTM fingerAfter finger.transform) "Biped-only redo did not restore finger"
         )
         biped.deleteCopyCollection ctrl copyCount
         format "PASS: Bone hierarchy, native Biped posture, mixed selection, repeat paste, controller preservation, undo, duplicate/missing hierarchy and atomic clipboard.\n"
     ) catch (failure = getCurrentException())
-    with undo off (for node in created where isValidNode node do delete node)
+    with undo on (for node in created where isValidNode node do delete node)
     if doesFileExist tool.cachePath do deleteFile tool.cachePath
     if failure != undefined do throw failure
 )
