@@ -9,6 +9,8 @@ global CGH_PoseClipboardNoUI
 struct CGH_PoseClipboardStruct
 (
     cachePath = undefined,
+    lastUndoReport = "",
+    lastPasteUndoRecorded = false,
 
     fn getCachePath =
     (
@@ -169,6 +171,8 @@ struct CGH_PoseClipboardStruct
 
     fn pastePose =
     (
+        lastPasteUndoRecorded = false
+        lastUndoReport = ""
         local doc = loadPose()
         local pairs = #()
         local seenNames = #()
@@ -205,8 +209,41 @@ struct CGH_PoseClipboardStruct
         local io = dotNetClass "System.IO.File"
         local cpyPath = (getFilenamePath (getCachePath())) + (uniqueId()) + ".cpy"
         local failure = undefined
-        -- Restore all edits together if a controller rejects the operation.
         if theHold.Holding() do throw "请结束当前交互操作后再粘贴。"
+        local levelsBeforeLoad = theHold.getCurrentUndoLevels()
+        -- Prepare native buffers before recording animation edits. Do not delete a buffer
+        -- used by paste: native undo/redo can still refer to that collection and its copy.
+        try
+        (
+            for pair in bips do
+            (
+                local ctrl = pair[1].controller
+                local collectionName = pair[2].GetAttribute "collection"
+                local collection = undefined
+                for index = 1 to biped.numCopyCollections ctrl do
+                (
+                    local candidate = biped.getCopyCollection ctrl index
+                    if candidate.name == collectionName do collection = candidate
+                )
+                if collection == undefined do
+                (
+                    io.WriteAllBytes cpyPath ((dotNetClass "System.Convert").FromBase64String pair[2].InnerText)
+                    biped.loadCopyPasteFile ctrl cpyPath
+                    for index = 1 to biped.numCopyCollections ctrl do
+                    (
+                        local candidate = biped.getCopyCollection ctrl index
+                        if candidate.name == collectionName do collection = candidate
+                    )
+                )
+                if collection == undefined do throw "未找到导入的 Biped 姿势集合。"
+                append pair (getCopy collection #posture 1)
+            )
+        ) catch (failure = getCurrentException())
+        if io.Exists cpyPath do io.Delete cpyPath
+        if failure != undefined do throw failure
+        local levelsBeforePaste = theHold.getCurrentUndoLevels()
+        local putsBeforePaste = theHold.GetGlobalPutCount()
+        -- Restore all animation edits together if a controller rejects the operation.
         -- Rollout handlers start with MXS undo recording off. A Hold alone does not enable it.
         -- Group the explicit undo context so a failed paste can cancel only its own edits.
         theHold.SuperBegin()
@@ -219,25 +256,8 @@ struct CGH_PoseClipboardStruct
                     for pair in bips do
                     (
                         local ctrl = pair[1].controller
-                        local before = biped.numCopyCollections ctrl
-                        local pasteFailure = undefined
-                        try
-                        (
-                            io.WriteAllBytes cpyPath ((dotNetClass "System.Convert").FromBase64String pair[2].InnerText)
-                            biped.loadCopyPasteFile ctrl cpyPath
-                            local collection = undefined
-                            for index = before + 1 to biped.numCopyCollections ctrl do
-                            (
-                                local candidate = biped.getCopyCollection ctrl index
-                                if candidate.name == pair[2].GetAttribute "collection" do collection = candidate
-                            )
-                            if collection == undefined do throw "未找到导入的 Biped 姿势集合。"
-                            local posture = getCopy collection #posture 1
-                            if not (biped.pasteBipPosture ctrl posture false #pstcopied true true true false) do
-                                throw "Biped 拒绝粘贴姿势。"
-                        ) catch (pasteFailure = getCurrentException())
-                        for index = biped.numCopyCollections ctrl to (before + 1) by -1 do biped.deleteCopyCollection ctrl index
-                        if pasteFailure != undefined do throw pasteFailure
+                        if not (biped.pasteBipPosture ctrl pair[3] false #pstcopied true true true false) do
+                            throw "Biped 拒绝粘贴姿势。"
                     )
                     for pair in pairs where bipedRoot pair[1] == undefined do
                     (
@@ -253,7 +273,13 @@ struct CGH_PoseClipboardStruct
             ) catch (failure = getCurrentException())
         )
         if failure != undefined then theHold.SuperCancel() else theHold.SuperAccept "GameHelper Paste Pose"
-        if io.Exists cpyPath do io.Delete cpyPath
+        local levelsAfterPaste = theHold.getCurrentUndoLevels()
+        local putsAdded = theHold.GetGlobalPutCount() - putsBeforePaste
+        lastPasteUndoRecorded = failure == undefined and putsAdded > 0 and levelsAfterPaste > 0
+        lastUndoReport = "load=" + (levelsBeforeLoad as string) + "->" + (levelsBeforePaste as string) + \
+            "; paste=" + (levelsBeforePaste as string) + "->" + (levelsAfterPaste as string) + \
+            "; restoreObjects=" + (putsAdded as string) + "; maxLevels=" + (theHold.getMaxUndoLevels() as string)
+        format "GameHelper Pose Clipboard undo: %\n" lastUndoReport
         if failure != undefined do throw failure
         redrawViews()
         pairs.count
@@ -262,7 +288,7 @@ struct CGH_PoseClipboardStruct
 
 CGH_PoseClipboard = CGH_PoseClipboardStruct()
 try (destroyDialog CGH_PoseClipboardUI) catch()
-rollout CGH_PoseClipboardUI "跨 Max 姿势剪贴板" width:320
+rollout CGH_PoseClipboardUI "跨 Max 姿势剪贴板 · 撤销诊断" width:320
 (
     label hint "源 Max：选骨骼/控制器 → 复制" align:#left
     label hint2 "目标 Max：切到目标帧 → 粘贴（自动打帧）" align:#left
@@ -278,7 +304,17 @@ rollout CGH_PoseClipboardUI "跨 Max 姿势剪贴板" width:320
     )
     on pasteButton pressed do
     (
-        try (status.text = "已粘贴 " + ((CGH_PoseClipboard.pastePose()) as string) + " 个对象，可撤销。")
+        try
+        (
+            local count = CGH_PoseClipboard.pastePose()
+            if CGH_PoseClipboard.lastPasteUndoRecorded then
+                status.text = "已粘贴 " + (count as string) + " 个对象，请检查 Ctrl+Z。"
+            else
+            (
+                status.text = "已粘贴，但未检测到有效撤销记录。"
+                messageBox ("Max 未生成可验证的撤销记录。\n诊断信息：" + CGH_PoseClipboard.lastUndoReport) title:"姿势剪贴板：撤销诊断"
+            )
+        )
         catch (status.text = "粘贴失败。"; messageBox (getCurrentException() as string) title:"姿势剪贴板")
     )
 )

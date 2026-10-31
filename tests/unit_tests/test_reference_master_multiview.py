@@ -610,8 +610,35 @@ class CacheTest
                 if ((int)type.GetProperty("ViewCount").GetValue(instance, null) != 1)
                     throw new System.Exception("Missing original player instance");
             }
+            var recorderType = assembly.GetType(prefix + "RecordWindow");
+            using (var recorder = (System.Windows.Forms.Form)System.Activator.CreateInstance(recorderType))
+            using (var strip = (System.Windows.Forms.ToolStrip)System.Activator.CreateInstance(assembly.GetType(prefix + "ToolStripEX")))
+            {
+                recorder.Controls.Add(strip);
+                recorderType.GetField("toolStrip").SetValue(recorder, strip);
+                recorder.MinimumSize = new System.Drawing.Size(216, 170);
+                recorder.MaximumSize = new System.Drawing.Size(0, 0);
+                // Windows still caps top-level forms to desktop dimensions. Test the real
+                // recording form up to the visible desktop, including 4K when available.
+                var desktop = System.Windows.Forms.SystemInformation.VirtualScreen;
+                var fullDesktop = new System.Drawing.Size(desktop.Width - 6, desktop.Height - strip.Height - 6);
+                foreach (var size in new[] { new System.Drawing.Size(1280, 720), new System.Drawing.Size(1920, 1080), fullDesktop })
+                {
+                    recorderType.GetMethod("SetRecordRes").Invoke(recorder, new object[] { size });
+                    var actual = (System.Drawing.Size)recorderType.GetMethod("GetRecordRes").Invoke(recorder, null);
+                    if (actual != size) throw new System.Exception("Recording size was capped: " + size + " -> " + actual);
+                }
+                recorder.MinimumSize = recorder.Size;
+                recorder.MaximumSize = recorder.Size;
+                recorder.MinimumSize = new System.Drawing.Size(216, 170);
+                recorder.MaximumSize = new System.Drawing.Size(0, 0);
+                var smaller = new System.Drawing.Size(1280, 720);
+                recorderType.GetMethod("SetRecordRes").Invoke(recorder, new object[] { smaller });
+                if ((System.Drawing.Size)recorderType.GetMethod("GetRecordRes").Invoke(recorder, null) != smaller)
+                    throw new System.Exception("Preview size lock remained after resetting recording limits");
+            }
         }
-        System.Console.WriteLine("PASS: complete embedded components compile; old and repeated sessions select their own types");
+        System.Console.WriteLine("PASS: complete embedded components compile; isolated sessions; recorder accepts 720p/1080p/desktop size and releases preview size lock");
     }
 }
 '''
@@ -633,6 +660,11 @@ def run_exe(command):
 def main():
     entry = ENTRY.read_text(encoding='utf-8-sig')
     script = CORE.read_text(encoding='utf-8-sig')
+    recorder_limits = script[script.index('fn uifn_SetRecorderMinMaxSize ='):script.index('uifn_SetRecorderMinMaxSize()', script.index('fn uifn_SetRecorderMinMaxSize ='))]
+    assert 'ui_RecordWindow.MaximumSize = dotnetobject "System.Drawing.Size" 0 0' in recorder_limits
+    assert 'RPMaxRecordReslotion' not in script, 'Remove the obsolete 960px recording cap and its description'
+    assert 'local RPMaxRecordSeconds' in script and '= 20' in script
+    assert 'ui_RecordWindow.MaximumSize = ui_RecordWindow.Size' in script, 'Keep preview size fixed'
     assert 'fileIn CorePath' in entry and entry.count('session.CreateView()') == 1
     assert 'session.CreateView beside:firstView' not in entry
     assert 'local pending = for quitView in CloseCallbacks collect quitView' in entry
@@ -718,7 +750,8 @@ def main():
         cache = folder / 'cache.cs'
         cache.write_text(CACHE_HARNESS, encoding='utf-8')
         cache_exe = folder / 'cache.exe'
-        subprocess.run([str(CSC), '/nologo', f'/out:{cache_exe}', str(cache)], check=True)
+        subprocess.run([str(CSC), '/nologo', f'/out:{cache_exe}', '/reference:System.Windows.Forms.dll',
+                        '/reference:System.Drawing.dll', str(cache)], check=True)
         run_exe([str(cache_exe), str(legacy_dll), *libraries])
 
 

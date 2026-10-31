@@ -59,6 +59,7 @@
         local parentKeyTimes = keyTimes parent.position.controller
         -- Rollout buttons run without an undo-on context; Listener-only tests hide this bug.
         with undo off (at time 10 tool.pastePose())
+        check tool.lastPasteUndoRecorded ("Bone undo record missing: " + tool.lastUndoReport)
         at time 10 check (closeTM wanted child.transform) "parent-first Bone round trip"
         check (child.controller == originalController) "controller replaced"
         max undo
@@ -147,9 +148,11 @@
         local handKeyTimes = keyTimes hand.controller
         boneKeyTimes = keyTimes child.rotation.controller
         with undo off (at time 12 tool.pastePose())
+        check tool.lastPasteUndoRecorded ("mixed undo record missing: " + tool.lastUndoReport)
         at time 12 check (closeTM (matrix3 rotation) (matrix3 (biped.getTransform hand #rotation))) "Biped native posture round trip"
         check (hand.controller == controller) "Biped controller replaced"
-        check (biped.numCopyCollections ctrl == copyCount) "paste lost or leaked collections"
+        local retainedCount = biped.numCopyCollections ctrl
+        check (retainedCount > copyCount) "native paste buffer was deleted before undo"
         check ((biped.getCopyCollection ctrl copyCount).name == keep.name) "existing Biped collection changed"
         local mixedHandAfter = at time 12 hand.transform
         local mixedBoneAfter = at time 12 child.transform
@@ -167,8 +170,18 @@
             check (closeTM mixedHandAfter hand.transform) "mixed redo did not restore Biped"
             check (closeTM mixedBoneAfter child.transform) "mixed redo did not restore Bone"
         )
+        local handBefore13 = at time 13 hand.transform
+        local boneBefore13 = at time 13 child.transform
         with undo off (at time 13 tool.pastePose())
-        check (biped.numCopyCollections ctrl == copyCount) "repeated paste leaked collections"
+        check (biped.numCopyCollections ctrl == retainedCount) "repeated paste imported the same buffer again"
+        max undo
+        at time 13
+        (
+            check (closeTM handBefore13 hand.transform) "second paste undo did not restore Biped"
+            check (closeTM boneBefore13 child.transform) "second paste undo did not restore Bone"
+        )
+        at time 12 check (closeTM mixedHandAfter hand.transform) "second paste undo also undid first paste"
+        max redo
         -- Copy a finger, raise the arm, then restore only the finger's local posture.
         local finger = biped.getNode bip #lfingers link:1
         local upperArm = biped.getNode bip #larm link:2
@@ -186,6 +199,7 @@
             local fingerBefore = finger.transform
             local fingerKeyTimes = keyTimes finger.controller
             with undo off (tool.pastePose())
+            check tool.lastPasteUndoRecorded ("Biped-only undo record missing: " + tool.lastUndoReport)
             check (closeTM raisedArm upperArm.transform) "finger posture paste moved raised arm"
             check (closeTM raisedHand hand.transform) "finger posture paste moved hand"
             check (closeTM fingerParent finger.parent.transform) "finger posture paste moved its parent"

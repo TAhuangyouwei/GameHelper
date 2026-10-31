@@ -124,7 +124,7 @@
 
             录制Max时,会录制整个时间轴
 
-            设置了最大分辨率和时长限制
+            录制尺寸可自由调整，保留时长限制
                 原因: -GDI录屏效率低 
                       -高分辨率与高时长在播放时会占用更多内存
             *录制网页时,可能需要缩小网页窗口来匹配录制窗口的大小
@@ -369,7 +369,6 @@
 		--[录制模式]:
 		local RPRecorderTSColor    /*录制窗口顶部颜色*/  = color 50 50 60
 		local RPRecorderBorderColor/*录制窗口边框颜色*/  = color 66 96 135
-        local RPMaxRecordReslotion /*最大录制分辨率*/   = [960,960]
         local RPMinRecordReslotion /*最小录制分辨率*/   = [210,135]
         local RPMaxRecordSeconds   /*最大录制时长(秒)*/ = 20
 
@@ -852,7 +851,7 @@
             HOME_TITLE                = "参考大师",
             HOME_DRAGAREA_TITLE       = "拖拽区",
             HOME_DRAGAREA_TEXT        = "(拖拽图像文件至窗口)",
-            HOME_DRAGAREA_DESCRIPTION = "录制分辨率最高{0}*{1} 录制时长{2}秒",
+            HOME_DRAGAREA_DESCRIPTION = "尺寸可调，录制时长{0}秒",
 
             HOME_TUTORIAL = "教程",
             HOME_COMPANY  = "长春伯仲",
@@ -1060,7 +1059,7 @@
 			GIF_SAVEGIF_TO_FILE = IntArrayToString #(23384, 20648, 33267, 25991, 20214, 46, 46, 46)
 			HOME_CLINICAL = IntArrayToString #(20020, 24202, 21160, 30011, 23398)
 			HOME_COMPANY = IntArrayToString #(38271, 26149, 20271, 20210)
-			HOME_DRAGAREA_DESCRIPTION = IntArrayToString #(24405, 21046, 20998, 36776, 29575, 26368, 39640, 123, 48, 125, 42, 123, 49, 125, 32, 24405, 21046, 26102, 38271, 123, 50, 125, 31186)
+			HOME_DRAGAREA_DESCRIPTION = "尺寸可调，录制时长{0}秒"
 			HOME_DRAGAREA_TEXT = IntArrayToString #(40, 25302, 25341, 22270, 20687, 25991, 20214, 33267, 31383, 21475, 41)
 			HOME_DRAGAREA_TITLE = IntArrayToString #(25302, 25341, 21306)
 			HOME_TITLE = IntArrayToString #(21442, 32771, 22823, 24072)
@@ -3475,7 +3474,8 @@
                 )
 
                 ui_RecordWindow.MinimumSize = Res_To_RecorderSize RPMinRecordReslotion
-                ui_RecordWindow.MaximumSize = Res_To_RecorderSize RPMaxRecordReslotion
+                -- Size(0,0) removes the script's fixed recording-size cap.
+                ui_RecordWindow.MaximumSize = dotnetobject "System.Drawing.Size" 0 0
                 
             )
 
@@ -4093,8 +4093,7 @@
 
 			local DragAreaDescription   = DrawingString()
 			DragAreaDescription.txt   = (
-				(dotnetclass "System.String").format HOME_DRAGAREA_DESCRIPTION \ --录制分辨率最高{0}*{1} 录制时长{2}秒
-				RPMaxRecordReslotion.x RPMaxRecordReslotion.y RPMaxRecordSeconds
+				(dotnetclass "System.String").format HOME_DRAGAREA_DESCRIPTION RPMaxRecordSeconds
 			)
 			DragAreaDescription.Font  = DNFont "Microsoft YaHei" 10 
 			DragAreaDescription.Brush = SolidBrush DragAreaColor
