@@ -22,6 +22,7 @@ GameHelper 是一组用于 3ds Max 的 MAXScript 工具，涵盖动画、绑定�
 - [当前目录结构](docs/DIRECTORY_LAYOUT.md)
 - [依赖关系](docs/DEPENDENCY_MAP.md)
 - [分阶段整理计划](docs/REORGANIZATION_PLAN.md)
+- [Max 2024 渲染后自动生成 MP4](docs/AUTO_RENDER_MP4.md)
 
 ## 当前安全规则
 
